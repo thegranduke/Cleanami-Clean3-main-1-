@@ -5,13 +5,18 @@ import Link from "next/link";
 interface PropertyHeaderProps {
   property: PropertyDetails;
   customer: PropertyDetails['customer'];
+  listHref?: string;
 }
 
-export const PropertyHeader = ({ property, customer }: PropertyHeaderProps) => {
+export const PropertyHeader = ({
+  property,
+  customer,
+  listHref = "/admin/properties",
+}: PropertyHeaderProps) => {
   return (
     <div>
       <Link
-        href="/admin/properties"
+        href={listHref}
         className="flex items-center text-sm font-semibold text-gray-600 hover:text-gray-900 mb-4"
       >
         <ArrowLeftIcon className="mr-2 h-5 w-5" />

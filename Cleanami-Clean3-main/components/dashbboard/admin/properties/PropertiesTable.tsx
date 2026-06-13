@@ -6,6 +6,8 @@ import { PropertiesWithOwner } from "@/lib/queries/properties";
 interface PropertiesTableProps {
   properties: PropertiesWithOwner['data'];
   onDelete: (property: PropertiesWithOwner['data'][number]) => void;
+  portalPrefix?: string;
+  showDelete?: boolean;
 }
 
 const getStatusBadge = (status: string | null | undefined) => {
@@ -14,7 +16,12 @@ const getStatusBadge = (status: string | null | undefined) => {
     return 'bg-gray-100 text-gray-800';
 }
 
-export const PropertiesTable = ({ properties, onDelete }: PropertiesTableProps) => {
+export const PropertiesTable = ({
+  properties,
+  onDelete,
+  portalPrefix = "/admin",
+  showDelete = true,
+}: PropertiesTableProps) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -51,9 +58,10 @@ export const PropertiesTable = ({ properties, onDelete }: PropertiesTableProps) 
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex items-center justify-end space-x-4">
-                    <Link href={`/admin/properties/${property.id}`} className="text-teal-600 hover:text-teal-900">
+                    <Link href={`${portalPrefix}/properties/${property.id}`} className="text-teal-600 hover:text-teal-900">
                       Details
                     </Link>
+                    {showDelete && (
                     <button
                       onClick={() => onDelete(property)}
                       className="text-gray-400 hover:text-red-600"
@@ -61,6 +69,7 @@ export const PropertiesTable = ({ properties, onDelete }: PropertiesTableProps) 
                     >
                       <TrashIcon className="h-5 w-5" />
                     </button>
+                    )}
                   </div>
                 </td>
               </tr>

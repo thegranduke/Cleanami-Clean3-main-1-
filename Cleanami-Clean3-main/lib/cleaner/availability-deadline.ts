@@ -16,13 +16,45 @@ export type DeadlineStatus = {
   deadline: Date;
 };
 
-/** Next 14 days starting today (America/New_York). */
+/** Monday 00:00 ET for the week containing `now`. */
+function getThisWeekMonday(now: Date): Date {
+  const day = now.getDay();
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  const monday = addDays(now, -daysFromMonday);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+/**
+ * Pick the Monday that starts the next open availability window.
+ * Tries this week's Monday, then next Monday, then advances by 14 days.
+ */
+function getOpenPeriodStart(now: Date): Date {
+  const thisMonday = getThisWeekMonday(now);
+  const nextMonday = addDays(thisMonday, 7);
+
+  for (const candidate of [thisMonday, nextMonday]) {
+    const iso = format(candidate, "yyyy-MM-dd");
+    if (!getDeadlineStatus(iso).rejected) {
+      return candidate;
+    }
+  }
+
+  let periodStart = addDays(nextMonday, 7);
+  while (getDeadlineStatus(format(periodStart, "yyyy-MM-dd")).rejected) {
+    periodStart = addDays(periodStart, 14);
+  }
+  return periodStart;
+}
+
+/** Next 14 days starting on the Monday of the current open submission window. */
 export function getTwoWeekPeriod(): AvailabilityPeriod {
   const now = toZonedTime(new Date(), TZ);
+  const periodStart = getOpenPeriodStart(now);
   const dates: string[] = [];
 
   for (let i = 0; i < 14; i++) {
-    dates.push(format(addDays(now, i), "yyyy-MM-dd"));
+    dates.push(format(addDays(periodStart, i), "yyyy-MM-dd"));
   }
 
   return {

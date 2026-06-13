@@ -7,17 +7,17 @@ import { PropertyHeader } from "@/components/dashbboard/admin/properties/Propert
 export default async function Page({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string; id: string }>;
 }) {
-  const { id } = await params;
+  const { slug, id } = await params;
   const propertyDetails = await getPropertyDetails(id);
  
   return (
     <div className="space-y-6">
-      {/* Pass the necessary data down as props */}
       <PropertyHeader 
         property={propertyDetails} 
-        customer={propertyDetails.customer} 
+        customer={propertyDetails.customer}
+        listHref={`/${slug}/properties`}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

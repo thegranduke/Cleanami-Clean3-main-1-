@@ -3,12 +3,14 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useMemo } from 'react';
 import { useDebounce } from 'use-debounce';
+import { usePathname } from 'next/navigation';
 import { PropertiesTable } from '@/components/dashbboard/admin/properties/PropertiesTable';
 import { PropertiesWithOwner } from '@/lib/queries/properties';
 import { createClient } from '@/lib/supabase/client';
 import { ConfirmationModal } from '@/components/dashbboard/admin/ui/ConfirmationModal';
 import { TriangleAlertIcon, PlusIcon } from 'lucide-react';
 import { SearchBar } from '@/components/dashbboard/admin/ui/SearchBar';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 async function fetchProperties({ pageParam = 1, queryKey }: { pageParam?: number, queryKey: any[] }) {
   const [_, { search }] = queryKey;
@@ -21,6 +23,12 @@ async function fetchProperties({ pageParam = 1, queryKey }: { pageParam?: number
 
 export const PropertiesPageClient = () => {
   const queryClient = useQueryClient();
+  const pathname = usePathname();
+  const { data: user } = useCurrentUser();
+  const portalPrefix = pathname.startsWith('/customer') ? '/customer' : '/admin';
+  const isAdmin =
+    user?.user_metadata?.role === 'admin' ||
+    user?.user_metadata?.role === 'super_admin';
   const [propertyToDelete, setPropertyToDelete] = useState<PropertiesWithOwner['data'][number] | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
@@ -65,7 +73,12 @@ export const PropertiesPageClient = () => {
         </div>
         
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <PropertiesTable properties={allProperties} onDelete={setPropertyToDelete} />
+            <PropertiesTable
+              properties={allProperties}
+              onDelete={setPropertyToDelete}
+              portalPrefix={portalPrefix}
+              showDelete={isAdmin}
+            />
         </div>
 
         <div className="p-4 flex justify-center">
