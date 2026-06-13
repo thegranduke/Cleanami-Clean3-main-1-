@@ -10,9 +10,13 @@ import { getCustomerDetails } from "@/lib/queries/customers";
 
 
 // FIX: The dynamic parameter from the folder name '[id]' is `params.id`.
-export default async function Page({ params }: { params: { id: string } }) {
-  // Fetch ALL customer data in one go on the server using the correct ID.
-  const customerDetails = await getCustomerDetails(params.id);
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const customerDetails = await getCustomerDetails(id);
   
   return (
     <div className="space-y-6">

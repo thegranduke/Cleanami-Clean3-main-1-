@@ -7,6 +7,7 @@ import { getDbOrNull } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getStripe } from '@/lib/stripe/get-stripe';
 import { SERVICE_UNAVAILABLE } from '@/lib/env/messages';
+import Stripe from 'stripe';
 
 const pricingService = new PricingService();
 

@@ -3,10 +3,10 @@ import { db } from "@/db";
 import { jobs, properties, subscriptions, customers } from "@/db/schemas";
 import { eq, and, isNull, gte, lt } from "drizzle-orm";
 import { PricingService } from "@/lib/services/pricing.service";
-import Stripe from "stripe";
+import { getStripe } from "@/lib/stripe/get-stripe";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 import { CancellationDetectionService } from "@/lib/services/cancellation-detection/cancellationDetection.service";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const pricingService = new PricingService();
 
 export async function POST(req: NextRequest) {
@@ -15,6 +15,11 @@ export async function POST(req: NextRequest) {
   )[1];
   if (authToken !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    return NextResponse.json({ error: SERVICE_UNAVAILABLE }, { status: 503 });
   }
 
   console.log("=== CANCELLATION DETECTION ===");

@@ -58,7 +58,7 @@ export function CleanersPageClient() {
   );
   
   const sortedCleaners = useMemo(() => {
-    let sortableItems = [...uniqueCleaners];
+    const sortableItems = [...uniqueCleaners];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         const key = sortConfig.key;

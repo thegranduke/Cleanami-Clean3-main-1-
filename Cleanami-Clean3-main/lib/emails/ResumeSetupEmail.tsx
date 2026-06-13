@@ -46,7 +46,7 @@ export const ResumeSetupEmail = ({
           </Text>
 
           <Text style={paragraph}>
-            Thanks for booking a setup call with me. I'm looking forward to
+            Thanks for booking a setup call with me. I&apos;m looking forward to
             helping you get CleanNami configured perfectly for your property.
           </Text>
 
@@ -73,7 +73,7 @@ export const ResumeSetupEmail = ({
           <Text style={paragraph}>
             <strong>Nothing is lost.</strong> You will continue exactly where
             you left off. Click the button below to resume your setup whenever
-            you're ready:
+            you&apos;re ready:
           </Text>
 
           <Section style={buttonContainer}>

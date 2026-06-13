@@ -12,11 +12,11 @@ import type { SignUpRole } from "@/lib/validations/auth";
 type DrizzleClient = typeof import("@/db").db;
 type ServiceRespnse<T> =
   | {
-      success: boolean;
+      success: true;
       data: T;
     }
   | {
-      success: boolean;
+      success: false;
       data?: T;
       error: {
         message: string;

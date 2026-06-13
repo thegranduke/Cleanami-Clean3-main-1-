@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { jobs, evidencePackets, reserveTransactions, payouts, jobsToCleaners } from "@/db/schemas";
 import { eq } from "drizzle-orm";
-import Stripe from "stripe";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import type Stripe from "stripe";
+import { getStripe } from "@/lib/stripe/get-stripe";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
 export async function POST(req: NextRequest) {
   try {
@@ -158,6 +158,11 @@ export async function POST(req: NextRequest) {
     }
 
     let paymentIntent: Stripe.PaymentIntent;
+
+    const stripe = getStripe();
+    if (!stripe) {
+      return NextResponse.json({ error: SERVICE_UNAVAILABLE }, { status: 503 });
+    }
     
     try {
       paymentIntent = await stripe.paymentIntents.capture(job.paymentIntentId);

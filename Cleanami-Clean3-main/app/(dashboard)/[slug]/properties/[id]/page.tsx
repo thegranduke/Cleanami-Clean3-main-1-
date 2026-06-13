@@ -4,9 +4,13 @@ import PropertyDetailsLeftColumn from "@/components/dashbboard/admin/properties/
 import { PropertyHeader } from "@/components/dashbboard/admin/properties/PropertyHeader";
 
 // The page now receives the dynamic route parameter, e.g., 'id'
-export default async function Page({ params }: { params: { id: string } }) {
-  // Fetch ALL property data in one go on the server
-  const propertyDetails = await getPropertyDetails(params.id);
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const propertyDetails = await getPropertyDetails(id);
  
   return (
     <div className="space-y-6">

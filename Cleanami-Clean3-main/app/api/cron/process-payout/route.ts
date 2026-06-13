@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { payouts, cleaners } from "@/db/schemas";
 import { eq } from "drizzle-orm";
-import Stripe from "stripe";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from "@/lib/stripe/get-stripe";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +12,11 @@ export async function POST(req: NextRequest) {
     
     if (token !== process.env.CRON_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const stripe = getStripe();
+    if (!stripe) {
+      return NextResponse.json({ error: SERVICE_UNAVAILABLE }, { status: 503 });
     }
 
     const pendingPayouts = await db.query.payouts.findMany({
