@@ -9,6 +9,21 @@ import { formatError } from "@/lib/utils";
 import { AuthService } from "@/lib/services/auth/auth.service";
 import { AuthUserForm } from "@/lib/types/auth";
 
+function redirectForRole(role: string | undefined) {
+  if (role === "cleaner") {
+    revalidatePath("/cleaner/jobs");
+    return redirect("/cleaner/jobs");
+  }
+
+  if (role === "admin" || role === "super_admin") {
+    revalidatePath("/admin/dashboard");
+    return redirect("/admin/dashboard");
+  }
+
+  revalidatePath("/customer/dashboard");
+  return redirect("/customer/dashboard");
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -23,6 +38,8 @@ export async function signUpUser(
     email: formData.get("email") as string,
     password: formData.get("password") as string,
     confirmPassword: formData.get("confirm-password") as string,
+    role: formData.get("role") as string,
+    name: (formData.get("name") as string) || undefined,
   });
 
   if (!validation.success) {
@@ -51,23 +68,15 @@ export async function signUpUser(
         email: validatedFields.email,
       },
       error: {
-        message: "Invalid email or password",
+        message: result.error?.message ?? "Sign up failed. Please try again.",
       },
     };
   }
 
-  const userRole = result.data?.user_metadata.role || "user";
-  
+  const userRole =
+    result.data?.user_metadata?.role || validatedFields.role || "user";
 
-  if (userRole === "user") {
-    revalidatePath("/customer/dashboard");
-    return redirect("/customer/dashboard");
-  }
-
-  if (userRole === "admin") {
-    revalidatePath("/admin/dashboard");
-    return redirect("/admin/dashboard");
-  }
+  return redirectForRole(userRole);
 }
 
 export async function signInUser(
@@ -106,20 +115,12 @@ export async function signInUser(
         email: validatedFields.email,
       },
       error: {
-        message: "Invalid email or password",
+        message: result.error?.message ?? "Sign in failed. Please try again.",
       },
     };
   }
 
-  const userRole = result.data?.user_metadata.role || "user";
+  const userRole = result.data?.user_metadata?.role || "user";
 
-  if (userRole === "user") {
-    revalidatePath("/customer/dashboard");
-    return redirect("/customer/dashboard");
-  }
-
-  if (userRole === "admin" || userRole === "super_admin") {
-    revalidatePath("/admin/dashboard");
-    return redirect("/admin/dashboard");
-  }
+  return redirectForRole(userRole);
 }

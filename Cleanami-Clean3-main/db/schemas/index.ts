@@ -25,3 +25,4 @@ export * from './userPreferences.schema';
 export * from './pushNotificationTokens.schema';
 export * from './cancelledJobs.schema';
 export * from './onboardingSessions.schema';
+export * from './disputes.schema';

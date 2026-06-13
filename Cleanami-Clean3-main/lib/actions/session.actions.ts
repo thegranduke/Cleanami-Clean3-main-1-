@@ -1,10 +1,11 @@
 "use server";
 
-import { db } from "@/db";
+import { getDbOrNull } from "@/db";
 import { onboardingSessions } from "@/db/schemas/onboardingSessions.schema";
 import { eq, and, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { SignupFormData, PriceDetails } from "@/lib/validations/bookng-modal";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
 const COOKIE_NAME = "cleannami_session";
 const SESSION_EXPIRY_DAYS = 7;
@@ -59,6 +60,14 @@ function deserializeFormData(data: Record<string, unknown>): Partial<SignupFormD
   };
 }
 
+function databaseUnavailable(): SessionResponse {
+  return { success: false, error: SERVICE_UNAVAILABLE.database };
+}
+
+function databaseUnavailableSimple(): { success: false; error: string } {
+  return { success: false, error: SERVICE_UNAVAILABLE.database };
+}
+
 // ============================================================================
 // SESSION ACTIONS
 // ============================================================================
@@ -69,6 +78,9 @@ function deserializeFormData(data: Record<string, unknown>): Partial<SignupFormD
  */
 export async function createSession(): Promise<SessionResponse> {
   try {
+    const db = getDbOrNull();
+    if (!db) return databaseUnavailable();
+
     const [session] = await db
       .insert(onboardingSessions)
       .values({
@@ -105,6 +117,9 @@ export async function createSession(): Promise<SessionResponse> {
  */
 export async function loadSession(): Promise<SessionResponse> {
   try {
+    const db = getDbOrNull();
+    if (!db) return databaseUnavailable();
+
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get(COOKIE_NAME)?.value;
 
@@ -157,6 +172,9 @@ export async function saveSessionProgress(
   priceDetails: PriceDetails | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const db = getDbOrNull();
+    if (!db) return databaseUnavailableSimple();
+
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get(COOKIE_NAME)?.value;
 
@@ -198,6 +216,9 @@ export async function saveSessionProgress(
  */
 export async function markCallBooked(): Promise<{ success: boolean; error?: string }> {
   try {
+    const db = getDbOrNull();
+    if (!db) return databaseUnavailableSimple();
+
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get(COOKIE_NAME)?.value;
 
@@ -226,6 +247,9 @@ export async function markCallBooked(): Promise<{ success: boolean; error?: stri
  */
 export async function completeSession(): Promise<{ success: boolean; error?: string }> {
   try {
+    const db = getDbOrNull();
+    if (!db) return databaseUnavailableSimple();
+
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get(COOKIE_NAME)?.value;
 
@@ -264,6 +288,9 @@ export async function getResumeInfo(): Promise<{
   error?: string;
 }> {
   try {
+    const db = getDbOrNull();
+    if (!db) return { success: false, error: SERVICE_UNAVAILABLE.database };
+
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get(COOKIE_NAME)?.value;
 
@@ -308,6 +335,9 @@ export async function loadSessionByEmail(
   email: string
 ): Promise<SessionResponse> {
   try {
+    const db = getDbOrNull();
+    if (!db) return databaseUnavailable();
+
     const [session] = await db
       .select()
       .from(onboardingSessions)

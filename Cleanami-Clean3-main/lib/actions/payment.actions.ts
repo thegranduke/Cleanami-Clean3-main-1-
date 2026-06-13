@@ -1,14 +1,13 @@
 'use server';
 
-import Stripe from 'stripe';
 import { PricingService } from '../services/pricing.service';
 import { SignupFormData } from '../validations/bookng-modal';
 import { customers } from '@/db/schemas';
-import { db } from '@/db';
+import { getDbOrNull } from '@/db';
 import { eq } from 'drizzle-orm';
+import { getStripe } from '@/lib/stripe/get-stripe';
+import { SERVICE_UNAVAILABLE } from '@/lib/env/messages';
 
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const pricingService = new PricingService();
 
 export async function createValidatedPaymentIntent(
@@ -16,6 +15,16 @@ export async function createValidatedPaymentIntent(
   clientSideAmount: number
 ): Promise<{ clientSecret?: string | null; error?: string }> {
   try {
+    const stripe = getStripe();
+    if (!stripe) {
+      return { error: SERVICE_UNAVAILABLE.stripe };
+    }
+
+    const db = getDbOrNull();
+    if (!db) {
+      return { error: SERVICE_UNAVAILABLE.database };
+    }
+
     const serverPriceDetails = await pricingService.calculatePrice(formData);
     const serverAmountInCents = Math.round(serverPriceDetails.totalPerClean * 100);
 

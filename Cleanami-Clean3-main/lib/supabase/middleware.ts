@@ -108,8 +108,11 @@ export async function updateSession(request: NextRequest) {
 
     const isProtectedAdminRoute = pathname.startsWith('/admin');
 
+  const isProtectedCleanerRoute = pathname.startsWith('/cleaner');
+  const isCleanerApiRoute = pathname.startsWith('/api/cleaner');
 
   const isAdmin = userRole === 'super_admin' || userRole === 'admin';
+  const isCleaner = userRole === 'cleaner';
 
 
   // 1. Redirect unauthenticated users from protected customer routes
@@ -136,6 +139,25 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/customer/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // 3. Redirect unauthenticated users from protected cleaner routes
+  if (!user && isProtectedCleanerRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    return NextResponse.redirect(url);
+  }
+
+  // 4. Redirect non-cleaners away from cleaner portal
+  if (user && isProtectedCleanerRoute && !isCleaner) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    return NextResponse.redirect(url);
+  }
+
+  // 5. Block non-cleaners from cleaner API routes
+  if (isCleanerApiRoute && (!user || !isCleaner)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   

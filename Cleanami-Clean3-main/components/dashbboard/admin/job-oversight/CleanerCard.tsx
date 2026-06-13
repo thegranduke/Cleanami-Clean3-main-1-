@@ -7,11 +7,13 @@ export function CleanerCard({
   primaryCleaner,
   allCleaners,
   onAction,
+  readOnly = false,
 }: {
   job: JobDetails;
   primaryCleaner?: JobDetails['cleaners'][0]['cleaner'];
   allCleaners: JobDetails['cleaners'];
   onAction: (action: { title: string; message: string; onConfirm: () => void }) => void;
+  readOnly?: boolean;
 }) {
   const handleCheckIn = async () => {
   onAction({
@@ -87,7 +89,7 @@ const handleCheckOut = async () => {
             )}
 
             {/* Action buttons */}
-            {job.status === 'assigned' && (
+            {!readOnly && job.status === 'assigned' && (
               <button
                 onClick={handleCheckIn}
                 className="w-full text-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -96,7 +98,7 @@ const handleCheckOut = async () => {
               </button>
             )}
 
-            {job.status === 'in-progress' && (
+            {!readOnly && job.status === 'in-progress' && (
               <button
                 onClick={handleCheckOut}
                 className="w-full text-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-600 hover:bg-gray-700"

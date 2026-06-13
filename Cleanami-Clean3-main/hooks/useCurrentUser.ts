@@ -35,18 +35,16 @@ export function useCurrentUser() {
       if (error) throw error;
       
       if (!user) return null;
-      
-      const { data: userData, error: userError } = await supabase
+
+      const { data: userData } = await supabase
         .from('users')
         .select('*')
         .eq('supabase_user_id', user.id)
-        .single();
-      
-      if (userError) throw userError;
-      
+        .maybeSingle();
+
       return {
         ...user,
-        profile: userData,
+        profile: userData ?? null,
       };
     },
     staleTime: 1000 * 60 * 5,

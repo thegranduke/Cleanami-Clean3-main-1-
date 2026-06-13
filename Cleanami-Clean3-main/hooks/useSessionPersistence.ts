@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import { toast } from "sonner";
 import { SignupFormData, PriceDetails } from "@/lib/validations/bookng-modal";
 import {
   createSession,
@@ -9,6 +10,7 @@ import {
   clearSession,
   SessionResponse,
 } from "@/lib/actions/session.actions";
+import { isServiceUnavailableMessage } from "@/lib/env/messages";
 
 interface UseSessionPersistenceOptions {
   /** Debounce delay for autosave in ms */
@@ -67,6 +69,12 @@ export function useSessionPersistence(
     onSessionLoadedRef.current = onSessionLoaded;
   }, [onSessionLoaded]);
 
+  const notifyIfUnavailable = useCallback((error?: string) => {
+    if (error && isServiceUnavailableMessage(error)) {
+      toast.error(error);
+    }
+  }, []);
+
   // Check for existing session on mount
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -85,6 +93,8 @@ export function useSessionPersistence(
         const newSession = await createSession();
         if (newSession.success) {
           setSessionId(newSession.sessionId);
+        } else {
+          notifyIfUnavailable(newSession.error);
         }
       }
 
@@ -112,10 +122,12 @@ export function useSessionPersistence(
     const newSession = await createSession();
     if (newSession.success) {
       setSessionId(newSession.sessionId);
+    } else {
+      notifyIfUnavailable(newSession.error);
     }
     setHasExistingSession(false);
     setExistingSessionData(null);
-  }, []);
+  }, [notifyIfUnavailable]);
 
   // Debounced save
   const saveProgress = useCallback(
@@ -129,10 +141,11 @@ export function useSessionPersistence(
       }
 
       debounceTimerRef.current = setTimeout(async () => {
-        await saveSessionProgress(formData, currentStep, priceDetails);
+        const result = await saveSessionProgress(formData, currentStep, priceDetails);
+        notifyIfUnavailable(result.error);
       }, debounceMs);
     },
-    [debounceMs]
+    [debounceMs, notifyIfUnavailable]
   );
 
   // Immediate save (for step changes)
@@ -145,9 +158,10 @@ export function useSessionPersistence(
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      await saveSessionProgress(formData, currentStep, priceDetails);
+      const result = await saveSessionProgress(formData, currentStep, priceDetails);
+      notifyIfUnavailable(result.error);
     },
-    []
+    [notifyIfUnavailable]
   );
 
   // Cleanup debounce timer

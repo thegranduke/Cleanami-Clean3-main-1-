@@ -1,14 +1,15 @@
-
 import type { User as AuthUser, SupabaseClient } from "@supabase/supabase-js";
 import { signInFormSchema, signUpFormSchema } from "@/lib/validations/auth";
 import { z } from "zod";
 import { NewUser } from "@/lib/validations/schemas";
 import type { db } from "@/db";
-import { users } from "@/db/schemas";
+import { cleaners, users } from "@/db/schemas";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatError } from "@/lib/utils";
+import { getDbOrNull } from "@/db";
+import type { SignUpRole } from "@/lib/validations/auth";
 
-type DrizzleClient = typeof db;
+type DrizzleClient = typeof import("@/db").db;
 type ServiceRespnse<T> =
   | {
       success: boolean;
@@ -21,6 +22,55 @@ type ServiceRespnse<T> =
         message: string;
       };
     };
+
+async function syncUserMetadata(
+  userId: string,
+  role: SignUpRole,
+  displayName: string
+) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+
+  try {
+    const supabaseAdmin = createAdminClient();
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        role,
+        full_name: displayName,
+        name: displayName,
+      },
+    });
+  } catch (metadataError) {
+    console.warn("Could not sync user metadata via admin client:", metadataError);
+  }
+}
+
+async function rollbackAuthUser(userId: string): Promise<boolean> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "Cannot roll back auth user: SUPABASE_SERVICE_ROLE_KEY is not configured."
+    );
+    return false;
+  }
+
+  try {
+    const supabaseAdmin = createAdminClient();
+    const { error: deleteError } =
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+
+    if (deleteError) {
+      console.error(
+        "CRITICAL ERROR: Failed to roll back auth user after profile creation failure."
+      );
+      return false;
+    }
+
+    console.log(`Successfully rolled back auth user: ${userId}`);
+    return true;
+  } catch (error) {
+    console.error("Failed to roll back auth user:", error);
+    return false;
+  }
+}
 
 export class AuthService {
   private supabase: SupabaseClient;
@@ -43,11 +93,20 @@ export class AuthService {
         };
       }
 
-      const { email, password, role } = validation.data;
+      const { email, password, role, name } = validation.data;
+      const displayName = name?.trim() || email.split("@")[0];
+
       const { data: authData, error: authError } =
         await this.supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              role,
+              full_name: displayName,
+              name: displayName,
+            },
+          },
         });
 
       if (authError) {
@@ -67,39 +126,70 @@ export class AuthService {
       }
 
       const authUser = authData.user;
+      const authUserWithRole: AuthUser = {
+        ...authUser,
+        user_metadata: {
+          ...authUser.user_metadata,
+          role,
+          full_name: displayName,
+          name: displayName,
+        },
+      };
+
+      const database = getDbOrNull();
+      if (!database) {
+        console.warn(
+          "DATABASE_URL not configured — created Supabase auth user only. Add DATABASE_URL to enable full app features."
+        );
+
+        await syncUserMetadata(authUser.id, role, displayName);
+
+        return { success: true, data: authUserWithRole };
+      }
 
       try {
-        const newUser: NewUser = {
-          supabaseUserId: authUser.id,
-          email: authUser.email!,
-        };
+        await database.transaction(async (tx) => {
+          const newUser: NewUser = {
+            supabaseUserId: authUser.id,
+            email: authUser.email!,
+            role,
+            name: displayName,
+          };
 
-        await this.db.insert(users).values(newUser);
-        return { success: true, data: authUser };
+          const [insertedUser] = await tx
+            .insert(users)
+            .values(newUser)
+            .returning();
+
+          if (role === "cleaner") {
+            await tx.insert(cleaners).values({
+              userId: insertedUser.id,
+              email: authUser.email!,
+              fullName: displayName,
+            });
+          }
+        });
+
+        await syncUserMetadata(authUser.id, role, displayName);
+
+        return { success: true, data: authUserWithRole };
       } catch (dbError) {
         console.error(
-          "Failed to create userProfile, attempting to roll back auth user...",
+          "Failed to create user profile, attempting to roll back auth user...",
           dbError
         );
 
-        const supabaseAdmin = createAdminClient();
-
-        const { error: deleteError } =
-          await supabaseAdmin.auth.admin.deleteUser(authUser.id);
-
-        if (deleteError) {
-          console.error(
-            "CRITICAL ERROR: Failed to roll back auth user after profile creation failure."
-          );
+        const rolledBack = await rollbackAuthUser(authUser.id);
+        if (!rolledBack) {
           return {
             success: false,
             data: authUser,
             error: {
-              message: "A critical error occured. Please contact support.",
+              message: "A critical error occurred. Please contact support.",
             },
           };
         }
-        console.log(`Successfully rolled back auth user: ${authUser.id}`);
+
         return {
           success: false,
           data: authUser,

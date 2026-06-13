@@ -20,6 +20,8 @@ import { PriceSummary } from "./PriceSummary";
 import { completeOnboarding } from "@/lib/actions/onboarding.actions";
 import { cn } from "@/lib/utils";
 import { getLivePrice } from "@/lib/actions/clientSidePricing.actions";
+import { toast } from "sonner";
+import { isServiceUnavailableMessage } from "@/lib/env/messages";
 
 // Session persistence
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
@@ -222,6 +224,8 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
     
     if (result.success) {
       setShowCallBookedConfirmation(true);
+    } else if (result.error && isServiceUnavailableMessage(result.error)) {
+      toast.error(result.error);
     }
   };
 
@@ -246,6 +250,9 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
       await completeSession();
       setCurrentStep(TOTAL_STEPS);
     } else {
+      if (result.error && isServiceUnavailableMessage(result.error)) {
+        toast.error(result.error);
+      }
       const errorMessage = `Your payment was successful, but there was an issue finalizing your subscription. 
                 Our team has been notified. For your records, your transaction ID is: ${paymentIntentId}. 
                 Please contact support if you have any questions.`;

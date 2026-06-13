@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
+import { toast } from 'sonner';
 import { PriceDetails, SignupFormData } from '@/lib/validations/bookng-modal';
 import { createValidatedPaymentIntent } from '@/lib/actions/payment.actions';
 import { CheckoutForm } from './CheckoutForm';
 import { FounderCard } from '../../FounderCard';
 import { ShieldCheck, Lock } from 'lucide-react';
+import { isServiceUnavailableMessage } from '@/lib/env/messages';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
@@ -37,6 +39,9 @@ export const Step7Payment = ({
       .then(result => {
         if (result.error) {
           setError(result.error);
+          if (isServiceUnavailableMessage(result.error)) {
+            toast.error(result.error);
+          }
         } else if (result.clientSecret) {
           setClientSecret(result.clientSecret);
           setError(null);

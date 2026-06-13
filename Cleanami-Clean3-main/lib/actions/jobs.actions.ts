@@ -1,17 +1,26 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@/db";
+import { getDbOrNull } from "@/db";
 import { jobs } from "@/db/schemas";
 import { eq } from "drizzle-orm";
-import Stripe from "stripe";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from "@/lib/stripe/get-stripe";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
 export async function capturePaymentForJob(jobId: string): Promise<{
   success: boolean;
   message: string;
 }> {
+  const stripe = getStripe();
+  if (!stripe) {
+    return { success: false, message: SERVICE_UNAVAILABLE.stripe };
+  }
+
+  const db = getDbOrNull();
+  if (!db) {
+    return { success: false, message: SERVICE_UNAVAILABLE.database };
+  }
+
   const supabase = await createClient();
 
   const {

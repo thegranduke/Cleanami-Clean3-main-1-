@@ -13,12 +13,15 @@ import {
   ordering,
 } from './utils/queryBuilder';
 
-interface GetPropertiesParams extends PaginationParams, SearchParams {}
+interface GetPropertiesParams extends PaginationParams, SearchParams {
+  customerId?: string;
+}
 
 export async function getPropertiesWithOwner({
   page = 1,
   limit = 10,
   query = '',
+  customerId,
 }: GetPropertiesParams) {
   const offset = getPaginationOffset(page, limit);
 
@@ -97,6 +100,7 @@ export async function getPropertiesWithOwner({
     .leftJoin(customers, eq(properties.customerId, customers.id))
     .where(
       and(
+        customerId ? eq(properties.customerId, customerId) : undefined,
         buildSearchCondition(query, [properties.address, customers.name])
       )
     )

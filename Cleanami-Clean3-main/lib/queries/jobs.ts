@@ -21,6 +21,7 @@ interface GetJobsParams extends PaginationParams, SearchParams {
   endDate?: Date;
   propertyId?: string;
   cleanerId?: string;
+  customerId?: string;
 }
 
 export async function getJobsWithDetails({
@@ -32,6 +33,7 @@ export async function getJobsWithDetails({
   endDate,
   propertyId,
   cleanerId,
+  customerId,
 }: GetJobsParams) {
   const offset = getPaginationOffset(page, limit);
 
@@ -39,6 +41,7 @@ export async function getJobsWithDetails({
     filters.byStatus(jobs.status, status),
     filters.byDateRange(jobs.checkInTime, startDate, endDate),
     propertyId ? eq(jobs.propertyId, propertyId) : undefined,
+    customerId ? eq(properties.customerId, customerId) : undefined,
   ].filter(Boolean);
 
   const data = await db

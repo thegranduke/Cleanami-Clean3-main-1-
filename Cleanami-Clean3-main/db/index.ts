@@ -1,17 +1,47 @@
-import { config } from 'dotenv';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import * as schema from './schema';
+import { config } from "dotenv";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "./schema";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is required.');
+config({ path: ".env.local" });
+
+type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
+
+let client: ReturnType<typeof postgres> | null = null;
+let database: DrizzleDb | null = null;
+
+function isDatabaseUrlConfigured(): boolean {
+  const url = process.env.DATABASE_URL;
+  if (!url) return false;
+  if (url.includes("[YOUR-PASSWORD]")) return false;
+  return true;
 }
 
-config({ path: '.env.local' }); // or .env.local
+export function getDbOrNull(): DrizzleDb | null {
+  if (database) return database;
+  if (!isDatabaseUrlConfigured()) return null;
 
-const client = postgres(process.env.DATABASE_URL!);
-export const db = drizzle({ client, schema });
+  client = postgres(process.env.DATABASE_URL!);
+  database = drizzle({ client, schema });
+  return database;
+}
 
-export type Database = typeof db;
+export function getDatabaseUnavailableMessage(): string {
+  return SERVICE_UNAVAILABLE.database;
+}
+
+export const db = new Proxy({} as DrizzleDb, {
+  get(_target, prop, receiver) {
+    const instance = getDbOrNull();
+    if (!instance) {
+      throw new Error(SERVICE_UNAVAILABLE.database);
+    }
+
+    const value = Reflect.get(instance, prop, receiver);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
+
+export type Database = DrizzleDb;
 export { schema };

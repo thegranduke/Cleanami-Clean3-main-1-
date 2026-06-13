@@ -17,6 +17,7 @@ type SubscriptionStatus = 'active' | 'expired' | 'canceled' | 'pending';
 
 interface GetSubscriptionsParams extends PaginationParams, SearchParams {
   status?: SubscriptionStatus | 'all';
+  customerId?: string;
 }
 
 export async function getSubscriptionsWithDetails({
@@ -24,6 +25,7 @@ export async function getSubscriptionsWithDetails({
   limit = 10,
   status = 'all',
   query = '',
+  customerId,
 }: GetSubscriptionsParams) {
   const offset = getPaginationOffset(page, limit);
 
@@ -95,6 +97,7 @@ export async function getSubscriptionsWithDetails({
     .innerJoin(customers, eq(subscriptions.customerId, customers.id))
     .where(
       and(
+        customerId ? eq(subscriptions.customerId, customerId) : undefined,
         filters.byStatus(subscriptions.status, status),
         buildSearchCondition(query, [properties.address, customers.name, customers.email])
       )

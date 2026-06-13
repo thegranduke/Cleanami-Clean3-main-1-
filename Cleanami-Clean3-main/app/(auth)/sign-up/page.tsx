@@ -23,18 +23,24 @@ export default function Page() {
             <span className="text-brand">Clean</span>Nami
           </h1>
           <p className="mt-2 text-gray-600">Create your account</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Property owners and cleaners can sign up below
+          </p>
         </div>
 
         <CredentialsSignUpForm />
 
         <p className="mt-8 text-center text-sm text-gray-500">
-          Already have an account?
+          Already have an account?{" "}
           <Link
-            href='/sign-in'
+            href="/sign-in"
             className="font-semibold leading-6 text-brand hover:text-brand/80"
           >
             Log in
           </Link>
+        </p>
+        <p className="mt-3 text-center text-xs text-gray-400">
+          Cleaners: choose &quot;Cleaner&quot; when signing up to access the cleaner portal.
         </p>
       </div>
   );

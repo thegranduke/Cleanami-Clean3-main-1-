@@ -15,11 +15,16 @@ import { AdminActionsCard } from './AdminActionsCard';
 import { EvidenceReviewModal } from './modals/EvidenceReviewModal';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { useRealtimeCleanerCard } from '@/hooks/useRealtimeCleanerCard';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 
 export function JobDetailsClient({ jobId }: { jobId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: user } = useCurrentUser();
+  const isAdmin =
+    user?.user_metadata?.role === "admin" ||
+    user?.user_metadata?.role === "super_admin";
   useRealtimeCleanerCard(jobId)
   const { data: job, isLoading } = useQuery<JobDetails>({
     queryKey: ['job-details', jobId],
@@ -38,8 +43,10 @@ export function JobDetailsClient({ jobId }: { jobId: string }) {
     onConfirm: () => void;
   } | null>(null);
 
-  // Real-time subscription
+  // Real-time subscription (admin only — uses direct Supabase client)
   useEffect(() => {
+    if (!isAdmin) return;
+
     const supabase = createClient();
     const channel = supabase
       .channel(`job-details-${jobId}`)
@@ -69,7 +76,7 @@ export function JobDetailsClient({ jobId }: { jobId: string }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [jobId, queryClient]);
+  }, [jobId, queryClient, isAdmin]);
 
   if (isLoading || !job) {
     return (
@@ -95,7 +102,7 @@ export function JobDetailsClient({ jobId }: { jobId: string }) {
           <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Job Oversight
+          Back to {isAdmin ? "Job Oversight" : "your schedule"}
         </button>
 
         <JobSummaryHeader job={job} />
@@ -117,13 +124,16 @@ export function JobDetailsClient({ jobId }: { jobId: string }) {
               primaryCleaner={primaryCleaner}
               allCleaners={job.cleaners}
               onAction={(action) => setConfirmAction(action)}
+              readOnly={!isAdmin}
             />
             <PropertyDetailsCard property={job.property} />
             <IssuesCard evidencePacket={job.evidencePacket} />
-            <AdminActionsCard
-              job={job}
-              onAction={(action) => setConfirmAction(action)}
-            />
+            {isAdmin && (
+              <AdminActionsCard
+                job={job}
+                onAction={(action) => setConfirmAction(action)}
+              />
+            )}
           </div>
         </div>
       </div>

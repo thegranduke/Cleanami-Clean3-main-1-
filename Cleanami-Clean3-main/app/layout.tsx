@@ -4,6 +4,7 @@ import "./globals.css";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
 import { QueryProvider } from "@/providers/query-provider";
 import GoogleAnalytics from "@/components/AnalyticsTracking";
+import { SonnerToaster } from "@/components/SonnerToaster";
 
 export const metadata: Metadata = {
   title: APP_NAME,
@@ -24,6 +25,7 @@ export default function RootLayout({
 
       <body className="antialiased">
         <QueryProvider>{children}</QueryProvider>
+        <SonnerToaster />
       </body>
     </html>
   );

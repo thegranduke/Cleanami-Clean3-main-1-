@@ -1,18 +1,17 @@
-import Stripe from 'stripe';
+import Stripe from "stripe";
+import { getStripe } from "./get-stripe";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
-export const stripe = new Stripe(
-  process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY ?? '',
-  {
-    // https://github.com/stripe/stripe-node#configuration
-    // https://stripe.com/docs/api/versioning
-    // @ts-expect-error Won't work otherwise
-    apiVersion: null,
-    // Register this as an official Stripe plugin.
-    // https://stripe.com/docs/building-plugins#setappinfo
-    appInfo: {
-      name: 'Next.js Subscription Starter',
-      version: '0.0.0',
-      url: 'https://github.com/vercel/nextjs-subscription-payments'
+export { getStripe } from "./get-stripe";
+
+export const stripe = new Proxy({} as Stripe, {
+  get(_target, prop, receiver) {
+    const client = getStripe();
+    if (!client) {
+      throw new Error(SERVICE_UNAVAILABLE.stripe);
     }
-  }
-);
+
+    const value = Reflect.get(client, prop, receiver);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});

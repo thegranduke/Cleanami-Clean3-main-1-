@@ -41,6 +41,9 @@ export const Sidebar = () => {
   };
 
   const visibleNavItems = user?.user_metadata.role === 'admin' || user?.user_metadata.role === 'super_admin' ? PRIVATE_ADMIN_NAV_ROUTES : PRIVATE_USER_NAV_ROUTES;
+  const isAdmin =
+    user?.user_metadata?.role === "admin" ||
+    user?.user_metadata?.role === "super_admin";
 
 
   useEffect(() => {
@@ -60,6 +63,11 @@ const [availabilityBypass, setAvailabilityBypass] = useState(false)
 const [bypassLoading, setBypassLoading] = useState(true)
 
 useEffect(() => {
+  if (!isAdmin) {
+    setBypassLoading(false);
+    return;
+  }
+
   const supabase = createClient()
   
   const fetchBypass = async () => {
@@ -94,7 +102,7 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(channel)
   }
-}, [])
+}, [isAdmin])
 
 const toggleAvailabilityBypass = async () => {
   const supabase = createClient()
@@ -147,9 +155,14 @@ const triggerAssignmentEngine = async () => {
         <div className="h-20 flex items-center justify-between border-b border-gray-200 px-4">
           <h1 className="text-2xl font-extrabold text-gray-800 tracking-tight">
             <span className="text-teal-500">Clean</span>Nami
-            {user?.role === "admin" && (
+            {isAdmin && (
               <span className="block text-xs font-semibold text-gray-500 tracking-widest -mt-1">
                 ADMIN
+              </span>
+            )}
+            {!isAdmin && user?.user_metadata?.role === "user" && (
+              <span className="block text-xs font-semibold text-gray-500 tracking-widest -mt-1">
+                OWNER
               </span>
             )}
           </h1>
@@ -180,7 +193,7 @@ const triggerAssignmentEngine = async () => {
             ))}
           </div>
 
-{/* Availability Bypass Toggle */}
+{isAdmin && (
 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
   <div className="flex items-center justify-between">
     <div className="flex-1">
@@ -202,8 +215,9 @@ const triggerAssignmentEngine = async () => {
     </button>
   </div>
 </div>
+)}
 
-{/* Assignment Engine Trigger */}
+{isAdmin && (
 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
   <div className="space-y-2">
     <div className="flex-1">
@@ -252,6 +266,7 @@ const triggerAssignmentEngine = async () => {
     )}
   </div>
 </div>
+)}
         </nav>
       </aside>
 

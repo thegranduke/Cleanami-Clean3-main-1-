@@ -3,7 +3,15 @@ import { subscriptions } from "./subscriptions.schema";
 import { properties } from "./properties.schema";
 import { cleaners } from "./cleaners.schema";
 
-export const jobStatusEnum = pgEnum('job_status', ['unassigned','assigned', 'in-progress', 'completed', 'canceled']);
+export const jobStatusEnum = pgEnum('job_status', [
+  'unassigned',
+  'assigned',
+  'in-progress',
+  'completed_pending_evidence',
+  'awaiting_capture',
+  'completed',
+  'canceled',
+]);
 
 export const jobCleanerRoleEnum = pgEnum('job_cleaner_role', ['primary', 'backup', 'on-call', 'laundry_lead']);
 

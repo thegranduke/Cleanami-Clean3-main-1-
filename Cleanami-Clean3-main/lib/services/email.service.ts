@@ -1,4 +1,4 @@
-import { resend, EMAIL_FROM } from "@/lib/resend";
+import { getResend, getEmailUnavailableMessage, EMAIL_FROM } from "@/lib/resend";
 import ResumeSetupEmail from "../emails/ResumeSetupEmail";
 
 interface SendResumeEmailParams {
@@ -16,6 +16,11 @@ export async function sendResumeEmail({
   recipientName,
 }: SendResumeEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: getEmailUnavailableMessage() };
+    }
+
     const { error } = await resend.emails.send({
       from: EMAIL_FROM,
       to,

@@ -20,6 +20,7 @@ import { swapRequests } from "./swapRequests.schema";
 import { notifications } from "./notifications.schema";
 import { badges } from "./badges.schema";
 import { userPreferences } from "./userPreferences.schema";
+import { disputes } from "./disputes.schema";
 
 // --- No changes needed for customer, property, checklist, or subscription relations ---
 export const customerRelations = relations(customers, ({ many }) => ({
@@ -96,6 +97,7 @@ export const cleanerRelations = relations(cleaners, ({ one, many }) => ({
   swapRequestsReplacement: many(swapRequests, {
     relationName: "replacementCleaner",
   }),
+  disputes: many(disputes),
   userPreferences: one(userPreferences), // Add this line
 }));
 
@@ -242,6 +244,13 @@ export const jobStatsRelations = relations(jobStats, ({ one }) => ({
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
   cleaner: one(cleaners, {
     fields: [userPreferences.cleanerId],
+    references: [cleaners.id],
+  }),
+}));
+
+export const disputeRelations = relations(disputes, ({ one }) => ({
+  cleaner: one(cleaners, {
+    fields: [disputes.cleanerId],
     references: [cleaners.id],
   }),
 }));

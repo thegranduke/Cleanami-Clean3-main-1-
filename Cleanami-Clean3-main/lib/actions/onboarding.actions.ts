@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/db";
+import { getDbOrNull } from "@/db";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
   customers,
@@ -10,19 +10,23 @@ import {
   jobs,
 } from "@/db/schema";
 import { SignupFormData, signupFormSchema } from "../validations/bookng-modal";
-import Stripe from 'stripe';
 import { ICalService } from "../services/iCal/ical.service";
 import { eq } from "drizzle-orm";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
+import { getStripe } from "@/lib/stripe/get-stripe";
+import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 
 async function geocodeAddress(address: string): Promise<{ latitude: string; longitude: string } | null> {
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!googleMapsApiKey) {
+    console.warn("Geocoding skipped: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not configured");
+    return null;
+  }
+
   try {
     const response = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
         address
-      )}&key=${GOOGLE_MAPS_API_KEY}`
+      )}&key=${googleMapsApiKey}`
     );
 
     const data = await response.json();
@@ -69,6 +73,16 @@ export async function completeOnboarding(
   paymentIntentId: string
 ) {
   try {
+    const stripe = getStripe();
+    if (!stripe) {
+      return { success: false, error: SERVICE_UNAVAILABLE.stripe };
+    }
+
+    const db = getDbOrNull();
+    if (!db) {
+      return { success: false, error: SERVICE_UNAVAILABLE.database };
+    }
+
     const validatedData = signupFormSchema.parse(formData);
 
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
