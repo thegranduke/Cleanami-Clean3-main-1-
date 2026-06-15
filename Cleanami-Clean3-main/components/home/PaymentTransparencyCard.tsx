@@ -5,10 +5,6 @@ import {
   CreditCard,
   Clock,
   CheckCircle,
-  WashingMachine,
-  Sun,
-  Home,
-  DollarSign,
 } from "lucide-react";
 
 export const PaymentTransparencyCard = () => {
@@ -38,47 +34,12 @@ export const PaymentTransparencyCard = () => {
     },
   ];
 
-  const pricingDetails = [
-    {
-      icon: Home,
-      title: "Base Cleaning Fee",
-      range: "$105 – $305 per clean",
-      description:
-        "Based on the number of bedrooms and bathrooms in your vacation rental property.",
-      color: "text-indigo-600",
-    },
-    {
-      icon: DollarSign,
-      title: "Square Footage Surcharges",
-      range: "Up to +$100",
-      description:
-        "An additional fee is applied for properties larger than 1,000 sq ft, scaling up to $100 for properties between 2500-2999 sq ft.",
-      color: "text-blue-600",
-    },
-    {
-      icon: WashingMachine,
-      title: "Off-Site Laundry",
-      range: "$20 Base + $9 per load",
-      description:
-        "This covers the costs and time associated with transporting and cleaning items off-site.",
-      color: "text-teal-600",
-    },
-    {
-      icon: Sun,
-      title: "Hot Tub Service",
-      range: "Basic ($20) or Full Drain ($50)",
-      description:
-        "Choose between a quick chemical test/clean or a full drain, clean, and refill service.",
-      color: "text-amber-600",
-    },
-  ];
-
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveStep((prevStep) => (prevStep + 1) % paymentSteps.length);
     }, 3000);
     return () => clearInterval(timer);
-  }, []);
+  }, [paymentSteps.length]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 sm:p-6 font-sans">

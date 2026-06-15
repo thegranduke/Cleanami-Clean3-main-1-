@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { payouts, cleaners } from "@/db/schemas";
+import { payouts } from "@/db/schemas";
 import { eq } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe/get-stripe";
 import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";

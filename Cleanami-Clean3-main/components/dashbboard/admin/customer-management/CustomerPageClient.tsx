@@ -9,7 +9,7 @@ import { SearchBar } from "@/components/dashbboard/admin/ui/SearchBar";
 import { useDebounce } from "use-debounce";
 
 async function fetchCustomers({ pageParam = 1, queryKey }: { pageParam: number, queryKey: any[] }) {
-  const [_, { search }] = queryKey;
+  const { search } = queryKey[1] as { search: string };
   const res = await fetch(`/api/customers?page=${pageParam}&query=${search}`);
   if (!res.ok) {
     throw new Error("Network response was not ok");
@@ -64,7 +64,7 @@ export function CustomerPageClient() {
         <h1 className="text-3xl font-bold text-gray-900">
           Customer Management
         </h1>
-        <SearchBar onSearch={setSearchTerm} placeholder="Search by name or email..."/>
+        <SearchBar onSearch={setSearchTerm} placeholder="Search by name, email, or phone..."/>
       </div>
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -73,6 +73,8 @@ export function CustomerPageClient() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Properties</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Active Subscriptions</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer Since</th>
@@ -80,16 +82,16 @@ export function CustomerPageClient() {
               </tr>
             </thead>
             {status === "pending" ? (
-              <tbody><tr><td colSpan={5} className="p-4 text-center">Loading...</td></tr></tbody>
+              <tbody><tr><td colSpan={7} className="p-4 text-center">Loading...</td></tr></tbody>
             ) : status === "error" ? (
-              <tbody><tr><td colSpan={5} className="p-4 text-center text-red-500">Error: {error.message}</td></tr></tbody>
+              <tbody><tr><td colSpan={7} className="p-4 text-center text-red-500">Error: {error.message}</td></tr></tbody>
             ) : (
               <OwnersTable owners={allCustomers} />
             )}
              <tfoot>
                 <tr>
                     {/* FIX: Updated colSpan to match the new number of columns */}
-                    <td colSpan={5} className="p-4 text-center">
+                    <td colSpan={7} className="p-4 text-center">
                         <button
                             onClick={() => fetchNextPage()}
                             disabled={!hasNextPage || isFetchingNextPage}

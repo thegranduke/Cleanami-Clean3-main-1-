@@ -5,7 +5,7 @@ import {
   SignupFormData,
   signupFormSchema,
 } from "@/lib/validations/bookng-modal";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Step1CustomerInfo } from "./Step1CustomerInfo";
 import { Step2PropertyInfo } from "./Step2PropertyInfo";
 import { Step3Checklist } from "./Step3Checklist";
@@ -99,6 +99,7 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
   const [errors, setErrors] = useState<Record<string, string[] | undefined>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [portalInviteEmailSent, setPortalInviteEmailSent] = useState(true);
 
   // Call booking state
   const [showCallBookedConfirmation, setShowCallBookedConfirmation] = useState(false);
@@ -141,6 +142,8 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
     saveProgress(formData, currentStep, priceDetails);
   }, [formData, currentStep, priceDetails, saveProgress, hasExistingSession, isLoadingSession]);
 
+  const pricingFormSnapshot = useMemo(() => JSON.stringify(formData), [formData]);
+
   // Fetch price when form data changes
   useEffect(() => {
     const fetchPrice = async () => {
@@ -155,7 +158,7 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
     return () => {
       clearTimeout(timerId);
     };
-  }, [JSON.stringify(formData)]);
+  }, [pricingFormSnapshot, formData]);
 
   // Step change handler (saves immediately)
   const handleStepChange = async (newStep: number) => {
@@ -247,6 +250,9 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
     const result = await completeOnboarding(formData, paymentIntentId);
 
     if (result.success) {
+      setPortalInviteEmailSent(
+        result.data?.portalInviteEmailSent !== false
+      );
       await completeSession();
       setCurrentStep(TOTAL_STEPS);
     } else {
@@ -349,6 +355,7 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
             paymentIntentId={paymentData?.paymentIntentId}
             amount={paymentData?.amount}
             currency={paymentData?.currency}
+            portalInviteEmailSent={portalInviteEmailSent}
           />
         );
       default:

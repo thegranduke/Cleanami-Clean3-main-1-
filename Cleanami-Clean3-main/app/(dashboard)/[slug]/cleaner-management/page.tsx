@@ -6,7 +6,7 @@ export default async function CleanerManagementPage() {
   return (
     <PrefetchedInfinitePage
       queryKey={['cleaners']}
-      queryFn={() => getCleaners({ page: 1, limit: 10 })}
+      queryFn={() => getCleaners({ page: 1, limit: 15 })}
       getNextPageParam={(lastPage) => lastPage.nextPage}
     >
       <CleanersPageClient />

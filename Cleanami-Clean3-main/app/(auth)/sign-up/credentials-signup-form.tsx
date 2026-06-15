@@ -1,13 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { signUpUser } from "@/lib/actions/auth.actions";
 import Form from "next/form";
 import { LockIcon, MailIcon, UserIcon } from "lucide-react";
 import { AuthUserForm } from "@/lib/types/auth";
-import { SignUpRole } from "@/lib/validations/auth";
-import { cn } from "@/lib/utils";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -18,14 +16,12 @@ function SubmitButton() {
       disabled={pending}
       className="w-full justify-center rounded-lg bg-brand px-3 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand/60 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-60"
     >
-      {pending ? "Creating account..." : "Sign up"}
+      {pending ? "Creating account..." : "Sign up as cleaner"}
     </button>
   );
 }
 
 const CredentialsSignUpForm = () => {
-  const [role, setRole] = useState<SignUpRole>("user");
-
   const initialState: AuthUserForm = {
     success: false,
     data: {
@@ -40,58 +36,27 @@ const CredentialsSignUpForm = () => {
 
   return (
     <Form action={action} className="space-y-6">
-      <div>
-        <p className="mb-3 text-sm font-medium text-gray-700">I am signing up as</p>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setRole("user")}
-            className={cn(
-              "rounded-lg border px-3 py-3 text-sm font-medium transition-colors",
-              role === "user"
-                ? "border-brand bg-brand/10 text-brand"
-                : "border-gray-200 text-gray-600 hover:border-gray-300"
-            )}
-          >
-            Property owner
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole("cleaner")}
-            className={cn(
-              "rounded-lg border px-3 py-3 text-sm font-medium transition-colors",
-              role === "cleaner"
-                ? "border-brand bg-brand/10 text-brand"
-                : "border-gray-200 text-gray-600 hover:border-gray-300"
-            )}
-          >
-            Cleaner
-          </button>
-        </div>
-        <input type="hidden" name="role" value={role} />
-      </div>
+      <input type="hidden" name="role" value="cleaner" />
 
-      {role === "cleaner" && (
-        <div>
-          <label htmlFor="name" className="sr-only">
-            Full name
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <UserIcon className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              required
-              autoComplete="name"
-              className="block w-full rounded-md border-gray-300 py-3 pl-10 pr-3 text-gray-900 shadow-sm focus:border-brand focus:ring-brand"
-              placeholder="Full name"
-            />
+      <div>
+        <label htmlFor="name" className="sr-only">
+          Full name
+        </label>
+        <div className="relative">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <UserIcon className="h-5 w-5 text-gray-400" />
           </div>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            required
+            autoComplete="name"
+            className="block w-full rounded-md border-gray-300 py-3 pl-10 pr-3 text-gray-900 shadow-sm focus:border-brand focus:ring-brand"
+            placeholder="Full name"
+          />
         </div>
-      )}
+      </div>
 
       <div>
         <label htmlFor="email" className="sr-only">
@@ -109,7 +74,7 @@ const CredentialsSignUpForm = () => {
             defaultValue={data?.data.email}
             autoComplete="email"
             className="block w-full rounded-md border-gray-300 py-3 pl-10 pr-3 text-gray-900 shadow-sm focus:border-brand focus:ring-brand"
-            placeholder="Email address"
+            placeholder="Approved cleaner email"
           />
         </div>
       </div>

@@ -1,7 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { CleanerBottomNav } from "@/components/cleaner/CleanerBottomNav";
-import { CleanerHeader } from "@/components/cleaner/CleanerHeader";
+import { db } from "@/db";
+import { cleaners } from "@/db/schemas";
+import { eq } from "drizzle-orm";
+import {
+  getCleanerOnboardingBannerMessage,
+  isCleanerPortalUnlocked,
+} from "@/lib/cleaner/eligibility";
+import { CleanerLayoutShell } from "@/components/cleaner/CleanerLayoutShell";
+import { CleanerRouteGuard } from "@/components/cleaner/CleanerRouteGuard";
+import { getCleanerAuth } from "@/lib/cleaner-auth";
 
 export default async function CleanerLayout({
   children,
@@ -17,11 +25,24 @@ export default async function CleanerLayout({
     redirect("/sign-in");
   }
 
+  const { cleanerId } = await getCleanerAuth();
+  const cleaner = cleanerId
+    ? await db.query.cleaners.findFirst({
+        where: eq(cleaners.id, cleanerId),
+      })
+    : null;
+
+  const portalUnlocked = isCleanerPortalUnlocked(cleaner ?? null);
+  const bannerMessage = getCleanerOnboardingBannerMessage(cleaner ?? null);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <CleanerHeader />
-      <main className="mx-auto max-w-lg px-4 py-6 pb-24">{children}</main>
-      <CleanerBottomNav />
-    </div>
+    <CleanerRouteGuard portalUnlocked={portalUnlocked}>
+      <CleanerLayoutShell
+        portalUnlocked={portalUnlocked}
+        bannerMessage={bannerMessage}
+      >
+        {children}
+      </CleanerLayoutShell>
+    </CleanerRouteGuard>
   );
 }

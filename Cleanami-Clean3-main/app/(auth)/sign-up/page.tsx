@@ -22,9 +22,10 @@ export default function Page() {
           <h1 className={`text-3xl font-extrabold ${myFont.className} antialiased text-brand/60 tracking-tight`}>
             <span className="text-brand">Clean</span>Nami
           </h1>
-          <p className="mt-2 text-gray-600">Create your account</p>
+          <p className="mt-2 text-gray-600">Cleaner account signup</p>
           <p className="mt-1 text-sm text-gray-500">
-            Property owners and cleaners can sign up below
+            Only approved cleaner emails can create an account. Property owners
+            should complete booking onboarding instead.
           </p>
         </div>
 
@@ -40,7 +41,11 @@ export default function Page() {
           </Link>
         </p>
         <p className="mt-3 text-center text-xs text-gray-400">
-          Cleaners: choose &quot;Cleaner&quot; when signing up to access the cleaner portal.
+          Need property cleaning service?{" "}
+          <Link href="/" className="text-brand hover:text-brand/80">
+            Start the booking flow
+          </Link>{" "}
+          to create your owner account after payment.
         </p>
       </div>
   );

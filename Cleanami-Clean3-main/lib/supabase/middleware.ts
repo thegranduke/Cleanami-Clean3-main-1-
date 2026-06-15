@@ -109,7 +109,8 @@ export async function updateSession(request: NextRequest) {
     const isProtectedAdminRoute = pathname.startsWith('/admin');
 
   const isProtectedCleanerRoute = pathname.startsWith('/cleaner');
-  const isCleanerApiRoute = pathname.startsWith('/api/cleaner');
+  const isCleanerApiRoute =
+    pathname === '/api/cleaner' || pathname.startsWith('/api/cleaner/');
 
   const isAdmin = userRole === 'super_admin' || userRole === 'admin';
   const isCleaner = userRole === 'cleaner';
@@ -129,17 +130,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isProtectedCustomerRoute && isAdmin) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin/dashboard";
-    return NextResponse.redirect(url);
-  }
-
   if (user && isProtectedAdminRoute && !isAdmin) {
     const url = request.nextUrl.clone();
     url.pathname = "/customer/dashboard";
     return NextResponse.redirect(url);
   }
+
+  // Admins with a linked property profile can use /customer/* (owner portal).
 
   // 3. Redirect unauthenticated users from protected cleaner routes
   if (!user && isProtectedCleanerRoute) {

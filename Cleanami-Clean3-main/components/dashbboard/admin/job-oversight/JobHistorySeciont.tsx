@@ -1,6 +1,7 @@
 'use client';
 
 export function JobHistorySection({ jobId }: { jobId: string }) {
+  void jobId;
   // TODO: Implement when job_history table is added
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">

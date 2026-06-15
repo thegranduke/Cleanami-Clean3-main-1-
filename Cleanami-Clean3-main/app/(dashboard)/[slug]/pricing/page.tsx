@@ -3,8 +3,6 @@ import { asc, desc } from "drizzle-orm";
 import {
   basePricingRules,
   sqftSurchargeRules,
-  laundryPricingRules,
-  hotTubPricingRules,
   pricingUploads,
 } from "@/db/schemas";
 import { format } from "date-fns";

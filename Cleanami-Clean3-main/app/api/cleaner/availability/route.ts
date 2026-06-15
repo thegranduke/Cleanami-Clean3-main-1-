@@ -3,15 +3,19 @@ import {
   cleanerAuthErrorStatus,
   getCleanerAuth,
 } from "@/lib/cleaner-auth";
+import { requireCleanerAssignmentEligible } from "@/lib/cleaner/require-eligible";
 import {
   formatDateRange,
-  getDeadlineStatus,
-  getTwoWeekPeriod,
+  getAvailabilityWindow,
+  getLateSubmissionMessage,
+  getSubmissionClosedMessage,
 } from "@/lib/cleaner/availability-deadline";
 import {
   getCleanerAvailability,
   saveCleanerAvailability,
+  saveCleanerAvailabilityPreferences,
   type AvailabilityDayInput,
+  type AvailabilityPreferenceInput,
 } from "@/lib/queries/cleaner-availability";
 
 export async function GET() {
@@ -24,6 +28,15 @@ export async function GET() {
   }
 
   try {
+    const { eligible, error: eligibilityError } =
+      await requireCleanerAssignmentEligible(cleanerId);
+    if (!eligible) {
+      return NextResponse.json(
+        { error: eligibilityError ?? "Onboarding required" },
+        { status: 403 }
+      );
+    }
+
     const data = await getCleanerAvailability(cleanerId);
     return NextResponse.json(data);
   } catch (err) {
@@ -35,6 +48,12 @@ export async function GET() {
   }
 }
 
+type SaveBody = {
+  mode?: "full" | "preferences";
+  days?: AvailabilityDayInput[];
+  preferences?: AvailabilityPreferenceInput[];
+};
+
 export async function POST(request: NextRequest) {
   const { cleanerId, error } = await getCleanerAuth();
   if (!cleanerId) {
@@ -45,7 +64,59 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { days?: AvailabilityDayInput[] };
+    const { eligible, error: eligibilityError } =
+      await requireCleanerAssignmentEligible(cleanerId);
+    if (!eligible) {
+      return NextResponse.json(
+        { error: eligibilityError ?? "Onboarding required" },
+        { status: 403 }
+      );
+    }
+
+    const body = (await request.json()) as SaveBody;
+    const { period, deadline, displayMode } = getAvailabilityWindow();
+
+    if (body.mode === "preferences") {
+      const preferences = body.preferences;
+
+      if (!preferences?.length) {
+        return NextResponse.json(
+          { error: "preferences array is required" },
+          { status: 400 }
+        );
+      }
+
+      if (!deadline.canEditPreferences) {
+        return NextResponse.json(
+          {
+            error: getSubmissionClosedMessage(deadline, period, displayMode),
+          },
+          { status: 403 }
+        );
+      }
+
+      const validDates = new Set(period.dates);
+      for (const pref of preferences) {
+        if (!validDates.has(pref.date)) {
+          return NextResponse.json(
+            { error: `Date ${pref.date} is outside the current period` },
+            { status: 400 }
+          );
+        }
+      }
+
+      const { period: savedPeriod } = await saveCleanerAvailabilityPreferences(
+        cleanerId,
+        preferences
+      );
+
+      return NextResponse.json({
+        success: true,
+        mode: "preferences",
+        message: `On-Call and Open Pool updated for ${formatDateRange(savedPeriod.start, savedPeriod.end)}`,
+      });
+    }
+
     const days = body.days;
 
     if (!days?.length) {
@@ -55,14 +126,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const period = getTwoWeekPeriod();
-    const deadline = getDeadlineStatus(period.start);
-
-    if (deadline.rejected) {
+    if (!deadline.canSubmitRegular) {
       return NextResponse.json(
         {
-          error:
-            "Submission is more than 24 hours past the Sunday 6 PM deadline and cannot be accepted.",
+          error: getSubmissionClosedMessage(deadline, period, displayMode),
         },
         { status: 403 }
       );
@@ -82,25 +149,35 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      if (!day.isAvailable && day.openPoolEligible) {
+        return NextResponse.json(
+          { error: "Open Pool cannot be enabled when not available" },
+          { status: 400 }
+        );
+      }
     }
 
     const { period: savedPeriod } = await saveCleanerAvailability(
       cleanerId,
       days,
-      deadline.isGracePeriod
+      deadline.lateStatus
     );
+
+    const lateMessage = getLateSubmissionMessage(deadline.lateStatus);
 
     return NextResponse.json({
       success: true,
+      mode: "full",
       message: `Availability saved for ${formatDateRange(savedPeriod.start, savedPeriod.end)}`,
+      submissionStatus: deadline.lateStatus ?? "on_time",
+      lateMessage,
       isGracePeriod: deadline.isGracePeriod,
       pastDeadline: deadline.pastDeadline,
     });
   } catch (err) {
     console.error("[POST /api/cleaner/availability]", err);
-    return NextResponse.json(
-      { error: "Failed to save availability" },
-      { status: 500 }
-    );
+    const message =
+      err instanceof Error ? err.message : "Failed to save availability";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

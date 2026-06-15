@@ -3,6 +3,12 @@ import { cleaners } from './cleaners.schema';
 
 export const availabilityTypeEnum = pgEnum('availability_type', ['vacation_rental', 'residential']);
 
+export const availabilitySubmissionStatusEnum = pgEnum('availability_submission_status', [
+  'on_time',
+  'late_accepted',
+  'late_warning',
+]);
+
 export const availability = pgTable('availability', {
   id: uuid('id').primaryKey().defaultRandom(),
   cleanerId: uuid('cleaner_id').references(() => cleaners.id, { onDelete: 'cascade' }).notNull(),
@@ -13,6 +19,9 @@ export const availability = pgTable('availability', {
   onCallEligible: boolean('on_call_eligible').default(false),
   openPoolEligible: boolean('open_pool_eligible').default(false),
   isGracePeriod: boolean('is_grace_period').default(false),
+  submissionStatus: availabilitySubmissionStatusEnum('submission_status')
+    .default('on_time')
+    .notNull(),
   submittedAt: timestamp('submitted_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

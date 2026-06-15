@@ -8,13 +8,25 @@ import { PropertiesTable } from '@/components/dashbboard/admin/properties/Proper
 import { PropertiesWithOwner } from '@/lib/queries/properties';
 import { createClient } from '@/lib/supabase/client';
 import { ConfirmationModal } from '@/components/dashbboard/admin/ui/ConfirmationModal';
-import { TriangleAlertIcon, PlusIcon } from 'lucide-react';
+import { TriangleAlertIcon } from 'lucide-react';
 import { SearchBar } from '@/components/dashbboard/admin/ui/SearchBar';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
-async function fetchProperties({ pageParam = 1, queryKey }: { pageParam?: number, queryKey: any[] }) {
-  const [_, { search }] = queryKey;
-  const res = await fetch(`/api/properties?page=${pageParam}&query=${search}`);
+async function fetchProperties({
+  pageParam = 1,
+  queryKey,
+}: {
+  pageParam?: number;
+  queryKey: unknown[];
+}) {
+  const [, { search, ownerScope }] = queryKey as [
+    string,
+    { search: string; ownerScope: boolean },
+  ];
+  const scope = ownerScope ? "&ownerScope=1" : "";
+  const res = await fetch(
+    `/api/properties?page=${pageParam}&query=${search}${scope}`
+  );
   if (!res.ok) {
     throw new Error('Network response was not ok');
   }
@@ -26,6 +38,7 @@ export const PropertiesPageClient = () => {
   const pathname = usePathname();
   const { data: user } = useCurrentUser();
   const portalPrefix = pathname.startsWith('/customer') ? '/customer' : '/admin';
+  const isOwnerPortal = portalPrefix === '/customer';
   const isAdmin =
     user?.user_metadata?.role === 'admin' ||
     user?.user_metadata?.role === 'super_admin';
@@ -33,10 +46,13 @@ export const PropertiesPageClient = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
 
-  const queryKey = useMemo(() => ['properties', { search: debouncedSearchTerm }], [debouncedSearchTerm]);
+  const queryKey = useMemo(
+    () => ['properties', { search: debouncedSearchTerm, ownerScope: isOwnerPortal }],
+    [debouncedSearchTerm, isOwnerPortal]
+  );
 
   const {
-    data, error, fetchNextPage, hasNextPage, isFetchingNextPage, status,
+    data, fetchNextPage, hasNextPage, isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey,
     queryFn: fetchProperties,
@@ -65,7 +81,7 @@ export const PropertiesPageClient = () => {
   return (
      <div className="space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <SearchBar onSearch={setSearchTerm} placeholder="Search by address or owner..." />
+          <SearchBar onSearch={setSearchTerm} placeholder="Search by address, owner, email, or phone..." />
           {/* <button className="w-full md:w-auto flex items-center justify-center bg-teal-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-teal-600">
             <PlusIcon className="mr-2 h-5 w-5" />
             Add Property
@@ -77,7 +93,7 @@ export const PropertiesPageClient = () => {
               properties={allProperties}
               onDelete={setPropertyToDelete}
               portalPrefix={portalPrefix}
-              showDelete={isAdmin}
+              showDelete={isAdmin && !isOwnerPortal}
             />
         </div>
 

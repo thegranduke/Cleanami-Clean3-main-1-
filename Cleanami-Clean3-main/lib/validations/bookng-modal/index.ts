@@ -36,7 +36,16 @@ export const signupFormSchema = z
   .refine((data) => data.email === data.emailConfirm, {
     message: "Emails don't match",
     path: ["emailConfirm"],
-  });
+  })
+  .refine(
+    (data) =>
+      data.useDefaultChecklist === true ||
+      (data.checklistFile !== undefined && data.checklistFile.length > 0),
+    {
+      message: "Upload a checklist or choose the default checklist",
+      path: ["checklistFile"],
+    }
+  );
 
 export type SignupFormData = Partial<z.infer<typeof signupFormSchema>>;
 

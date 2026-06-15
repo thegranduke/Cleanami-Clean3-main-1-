@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/db";
 import { evidencePackets, jobs, payouts, properties } from "@/db/schemas";
 import { buildPayBreakdownFromPayout } from "@/lib/cleaner/pay-breakdown";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 export type CleanerPayoutRow = {
   id: string;

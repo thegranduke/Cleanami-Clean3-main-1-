@@ -5,14 +5,16 @@ import { revalidatePath } from "next/cache";
 import { signInFormSchema, signUpFormSchema } from "@/lib/validations/auth";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/db";
+import { users } from "@/db/schemas";
 import { formatError } from "@/lib/utils";
 import { AuthService } from "@/lib/services/auth/auth.service";
 import { AuthUserForm } from "@/lib/types/auth";
+import { eq } from "drizzle-orm";
 
 function redirectForRole(role: string | undefined) {
   if (role === "cleaner") {
-    revalidatePath("/cleaner/jobs");
-    return redirect("/cleaner/jobs");
+    revalidatePath("/cleaner/onboarding");
+    return redirect("/cleaner/onboarding");
   }
 
   if (role === "admin" || role === "super_admin") {
@@ -120,7 +122,17 @@ export async function signInUser(
     };
   }
 
-  const userRole = result.data?.user_metadata?.role || "user";
+  let userRole = result.data?.user_metadata?.role as string | undefined;
 
-  return redirectForRole(userRole);
+  if (result.data?.id) {
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.supabaseUserId, result.data.id),
+      columns: { role: true },
+    });
+    if (dbUser?.role) {
+      userRole = dbUser.role;
+    }
+  }
+
+  return redirectForRole(userRole || "user");
 }

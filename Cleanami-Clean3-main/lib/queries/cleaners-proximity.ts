@@ -1,5 +1,6 @@
 import { db } from '@/db';
 import { cleaners } from '@/db/schemas';
+import { isCleanerAssignmentEligible } from '@/lib/cleaner/eligibility';
 import { isNotNull, and } from 'drizzle-orm';
 import { calculateDistance, getPropertyCoordinates } from '@/lib/services/google-maps/geocoding';
 
@@ -42,10 +43,21 @@ export async function getAvailableCleanersForProperty(
       longitude: true,
       reliabilityScore: true,
       onCallStatus: true,
+      accountStatus: true,
+      onboardingCompleted: true,
+      onboardingStarted: true,
+      stripePayoutsEnabled: true,
+      stripeChargesEnabled: true,
+      stripeOnboardingComplete: true,
+      legalDocsSigned: true,
     },
   });
 
-  const availableCleaners = allCleaners
+  const eligibleCleaners = allCleaners.filter((cleaner) =>
+    isCleanerAssignmentEligible(cleaner)
+  );
+
+  const availableCleaners = eligibleCleaners
     .map((cleaner) => {
       const distance = calculateDistance(
         propertyCoords,

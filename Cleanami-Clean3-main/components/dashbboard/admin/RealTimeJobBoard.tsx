@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   useInfiniteQuery,
   useQuery,
@@ -8,18 +8,36 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { Route } from "next";
+import { usePathname } from "next/navigation";
 
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { JobsWithDetails } from "@/lib/queries/jobs";
 import { createClient } from "@/lib/supabase/client";
 import { GetJobsResponse } from "@/app/api/jobs/route";
 import { GetJobStatsResponse } from "@/app/api/jobs/stats/route";
+import { getDashboardJobDateRange, DASHBOARD_FUTURE_DAYS, DASHBOARD_PAST_DAYS } from "@/lib/queries/dashboard-job-window";
 import { KpiCard } from "./ui/KpiCard";
 import { ClientTime } from "./ui/ClientTime";
 import { getStatusBadge } from "../utils";
 
-async function fetchJobs({ pageParam = 1 }: { pageParam: number }) {
-  const res = await fetch(`/api/jobs?page=${pageParam}`);
+async function fetchJobs({
+  pageParam = 1,
+  ownerScope,
+}: {
+  pageParam: number;
+  ownerScope: boolean;
+}) {
+  const { startDate, endDate } = getDashboardJobDateRange();
+  const params = new URLSearchParams({
+    dashboard: "1",
+    page: String(pageParam),
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  });
+  if (ownerScope) {
+    params.set("ownerScope", "1");
+  }
+  const res = await fetch(`/api/jobs?${params}`);
   const result = (await res.json()) as GetJobsResponse & { error?: string };
   if (!res.ok) {
     throw new Error(result.error ?? "Could not load jobs");
@@ -31,18 +49,30 @@ async function fetchJobs({ pageParam = 1 }: { pageParam: number }) {
 }
 
 export const RealTimeJobBoard = () => {
+  const pathname = usePathname();
+  const isOwnerPortal = pathname.startsWith("/customer");
   const { data: user, isLoading: userLoading } = useCurrentUser();
   const userRole = user?.user_metadata?.role;
   const isAdmin = userRole === "admin" || userRole === "super_admin";
   const isCustomer = userRole === "user";
-  const portalPrefix = isAdmin ? "/admin" : "/customer";
+  const portalPrefix = isOwnerPortal ? "/customer" : "/admin";
+  const showOwnerView = isCustomer || (isAdmin && isOwnerPortal);
 
   const queryClient = useQueryClient();
+  const statsQueryKey = useMemo(
+    () => ["jobs", "stats", { ownerScope: isOwnerPortal }],
+    [isOwnerPortal]
+  );
+  const jobsQueryKey = useMemo(
+    () => ["jobs", { ownerScope: isOwnerPortal, dashboard: true }],
+    [isOwnerPortal]
+  );
 
   const { data: stats } = useQuery({
-    queryKey: ["jobs", "stats"],
+    queryKey: statsQueryKey,
     queryFn: async () => {
-      const res = await fetch("/api/jobs/stats");
+      const scope = isOwnerPortal ? "?ownerScope=1" : "";
+      const res = await fetch(`/api/jobs/stats${scope}`);
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
         throw new Error(body.error ?? "Failed to fetch stats");
@@ -61,8 +91,9 @@ export const RealTimeJobBoard = () => {
     isFetchingNextPage,
     status,
   } = useInfiniteQuery({
-    queryKey: ["jobs"],
-    queryFn: fetchJobs,
+    queryKey: jobsQueryKey,
+    queryFn: ({ pageParam }) =>
+      fetchJobs({ pageParam, ownerScope: isOwnerPortal }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => lastPage.nextPage,
     enabled: isAdmin || isCustomer,
@@ -78,15 +109,15 @@ export const RealTimeJobBoard = () => {
         "postgres_changes",
         { event: "*", schema: "public", table: "jobs" },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["jobs"] });
-          queryClient.invalidateQueries({ queryKey: ["jobs", "stats"] });
+          queryClient.invalidateQueries({ queryKey: jobsQueryKey });
+          queryClient.invalidateQueries({ queryKey: statsQueryKey });
         }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "jobs_to_cleaners" },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["jobs"] });
+          queryClient.invalidateQueries({ queryKey: jobsQueryKey });
         }
       )
       .subscribe();
@@ -94,7 +125,7 @@ export const RealTimeJobBoard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient, isAdmin]);
+  }, [queryClient, isAdmin, jobsQueryKey, statsQueryKey]);
 
   const allJobs = data?.pages.flatMap((page) => page.jobs) ?? [];
   const uniqueJobs = Array.from(
@@ -126,13 +157,13 @@ export const RealTimeJobBoard = () => {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">
-          {isCustomer ? "Your properties" : "Dashboard"}
+          {showOwnerView ? "Your properties" : "Dashboard"}
         </h1>
-        {isCustomer && (
-          <p className="mt-1 text-sm text-gray-500">
-            Upcoming and recent cleans for your subscribed properties.
-          </p>
-        )}
+        <p className="mt-1 text-sm text-gray-500">
+          Check-in order · last {DASHBOARD_PAST_DAYS} days through{" "}
+          {DASHBOARD_FUTURE_DAYS} days ahead
+          {showOwnerView ? " (your properties)" : ""}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -154,7 +185,7 @@ export const RealTimeJobBoard = () => {
 
       <div>
         <h2 className="mb-4 text-2xl font-bold text-gray-800">
-          {isCustomer ? "Your clean schedule" : "Real-Time Job Board"}
+          {showOwnerView ? "Your clean schedule" : "Real-Time Job Board"}
         </h2>
         <div className="overflow-hidden rounded-lg bg-white shadow-md">
           <div className="overflow-x-auto">

@@ -2,12 +2,17 @@ import type { User as AuthUser, SupabaseClient } from "@supabase/supabase-js";
 import { signInFormSchema, signUpFormSchema } from "@/lib/validations/auth";
 import { z } from "zod";
 import { NewUser } from "@/lib/validations/schemas";
-import type { db } from "@/db";
 import { cleaners, users } from "@/db/schemas";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatError } from "@/lib/utils";
 import { getDbOrNull } from "@/db";
 import type { SignUpRole } from "@/lib/validations/auth";
+import {
+  assertCleanerEmailApproved,
+  CLEANER_SIGNUP_REJECTED_MESSAGE,
+  logCleanerAuditEvent,
+  markInvitationSignedUp,
+} from "@/lib/queries/cleaner-invitations";
 
 type DrizzleClient = typeof import("@/db").db;
 type ServiceRespnse<T> =
@@ -95,6 +100,40 @@ export class AuthService {
 
       const { email, password, role, name } = validation.data;
       const displayName = name?.trim() || email.split("@")[0];
+      const normalizedEmail = email.toLowerCase();
+
+      if (role === "user") {
+        return {
+          success: false,
+          error: {
+            message:
+              "Customer accounts are created through the booking and payment flow. Please use Get Started on the homepage.",
+          },
+        };
+      }
+
+      if (role === "cleaner") {
+        const database = getDbOrNull();
+        if (!database) {
+          return {
+            success: false,
+            error: {
+              message:
+                "Cleaner signup is temporarily unavailable. Please try again later.",
+            },
+          };
+        }
+
+        const { approved, invitation } =
+          await assertCleanerEmailApproved(normalizedEmail);
+
+        if (!approved || !invitation) {
+          return {
+            success: false,
+            error: { message: CLEANER_SIGNUP_REJECTED_MESSAGE },
+          };
+        }
+      }
 
       const { data: authData, error: authError } =
         await this.supabase.auth.signUp({
@@ -148,6 +187,17 @@ export class AuthService {
       }
 
       try {
+        let invitationId: string | undefined;
+
+        if (role === "cleaner") {
+          const invitation = await database.query.cleanerInvitations.findFirst({
+            where: (inv, { eq }) => eq(inv.email, normalizedEmail),
+          });
+          invitationId = invitation?.id;
+        }
+
+        let insertedCleanerId: string | undefined;
+
         await database.transaction(async (tx) => {
           const newUser: NewUser = {
             supabaseUserId: authUser.id,
@@ -162,13 +212,32 @@ export class AuthService {
             .returning();
 
           if (role === "cleaner") {
-            await tx.insert(cleaners).values({
-              userId: insertedUser.id,
-              email: authUser.email!,
-              fullName: displayName,
-            });
+            const now = new Date();
+            const [insertedCleaner] = await tx
+              .insert(cleaners)
+              .values({
+                userId: insertedUser.id,
+                email: normalizedEmail,
+                fullName: displayName,
+                invitationId,
+                onboardingStarted: true,
+                onboardingStartedAt: now,
+                accountStatus: "onboarding_in_progress",
+              })
+              .returning({ id: cleaners.id });
+
+            insertedCleanerId = insertedCleaner.id;
           }
         });
+
+        if (role === "cleaner" && invitationId && insertedCleanerId) {
+          await markInvitationSignedUp(invitationId, insertedCleanerId);
+          await logCleanerAuditEvent({
+            action: "onboarding_started",
+            cleanerId: insertedCleanerId,
+            invitationId,
+          });
+        }
 
         await syncUserMetadata(authUser.id, role, displayName);
 

@@ -22,7 +22,13 @@ export function getDbOrNull(): DrizzleDb | null {
   if (database) return database;
   if (!isDatabaseUrlConfigured()) return null;
 
-  client = postgres(process.env.DATABASE_URL!);
+  client = postgres(process.env.DATABASE_URL!, {
+    // Required for Supabase pooler / serverless (Netlify, Vercel).
+    prepare: false,
+    max: 1,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  });
   database = drizzle({ client, schema });
   return database;
 }

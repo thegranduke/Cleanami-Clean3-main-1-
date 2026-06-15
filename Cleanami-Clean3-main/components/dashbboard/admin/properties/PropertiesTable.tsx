@@ -1,7 +1,7 @@
-import { TrashIcon, TriangleAlertIcon } from "lucide-react";
+import { TrashIcon } from "lucide-react";
 import Link from "next/link";
-import { ConfirmationModal } from "../ui/ConfirmationModal";
 import { PropertiesWithOwner } from "@/lib/queries/properties";
+import { formatContactValue } from "@/components/dashbboard/admin/ui/formatContact";
 
 interface PropertiesTableProps {
   properties: PropertiesWithOwner['data'];
@@ -31,6 +31,8 @@ export const PropertiesTable = ({
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property Address</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Email</th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Phone</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Clean</th>
               <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
@@ -45,6 +47,12 @@ export const PropertiesTable = ({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                   {property.customer?.name ?? 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {formatContactValue(property.customer?.email)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {formatContactValue(property.customer?.phone)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge('active')}`}>

@@ -1,6 +1,7 @@
 import { Route } from "next";
 import Link from "next/link";
 import { CustomersResponse } from "@/lib/queries/customers";
+import { formatContactValue } from "@/components/dashbboard/admin/ui/formatContact";
 import { useEffect, useState } from "react";
 
 interface OwnersTableProps {
@@ -22,7 +23,7 @@ export const OwnersTable = ({ owners = [] }: OwnersTableProps) => {
     return (
       <tbody>
         <tr>
-          <td colSpan={5} className="text-center p-12 text-gray-500">
+          <td colSpan={7} className="text-center p-12 text-gray-500">
             No customers found.
           </td>
         </tr>
@@ -36,7 +37,12 @@ export const OwnersTable = ({ owners = [] }: OwnersTableProps) => {
         <tr key={owner.id} className="hover:bg-gray-50">
           <td className="px-6 py-4 whitespace-nowrap">
             <div className="font-medium text-gray-900">{owner.name}</div>
-            <div className="text-sm text-gray-500">{owner.email}</div>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+            {formatContactValue(owner.email)}
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+            {formatContactValue(owner.phone)}
           </td>
           <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">
             {owner.propertyCount}
@@ -60,4 +66,3 @@ export const OwnersTable = ({ owners = [] }: OwnersTableProps) => {
     </tbody>
   );
 };
-

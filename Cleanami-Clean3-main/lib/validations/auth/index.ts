@@ -16,7 +16,7 @@ export const signUpFormSchema = z
     confirmPassword: z
       .string()
       .min(6, 'Confirm password must be at least 6 characters'),
-    role: signUpRoleSchema.default('user'),
+    role: signUpRoleSchema.default('cleaner'),
     name: z.string().trim().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {

@@ -19,7 +19,7 @@ interface JobHistoryProps {
   properties: CustomerDetails['properties'];
 }
 
-export const JobHistory = ({ jobs = [], properties=[] }: JobHistoryProps) => {
+export const JobHistory = ({ jobs = [] }: JobHistoryProps) => {
   return (
     <tbody className="divide-y">
       {jobs.length > 0 ? (

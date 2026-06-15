@@ -1,41 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJobsWithDetails } from "@/lib/queries/jobs";
+import {
+  getDashboardJobDateRange,
+} from "@/lib/queries/dashboard-job-window";
 import { createClient } from "@/lib/supabase/server";
 import {
   customerAuthErrorStatus,
-  getCustomerAuth,
+  resolvePortalCustomerScope,
 } from "@/lib/customer-auth";
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
-    const user = data?.claims;
-    const userRole = user?.user_metadata?.role;
+    const userRole = data?.claims?.user_metadata?.role as string | undefined;
 
-    const isAdmin = userRole === "admin" || userRole === "super_admin";
-    const isCustomer = userRole === "user";
-
-    if (!isAdmin && !isCustomer) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    let customerId: string | undefined;
-
-    if (isCustomer) {
-      const { customerId: resolvedCustomerId, error } = await getCustomerAuth();
-      if (!resolvedCustomerId) {
-        return NextResponse.json(
-          { error: error ?? "Unauthorized", data: [], nextPage: null },
-          { status: customerAuthErrorStatus(error) }
-        );
-      }
-      customerId = resolvedCustomerId;
+    const scope = await resolvePortalCustomerScope(request, userRole);
+    if (scope.error) {
+      return NextResponse.json(
+        { error: scope.error, data: [], nextPage: null },
+        { status: customerAuthErrorStatus(scope.error) }
+      );
     }
 
     const searchParams = request.nextUrl.searchParams;
+    const isDashboard = searchParams.get("dashboard") === "1";
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const limit = parseInt(
+      searchParams.get("limit") || (isDashboard ? "20" : "10")
+    );
     const status = (searchParams.get("status") || "all") as
       | "unassigned"
       | "assigned"
@@ -45,12 +38,18 @@ export async function GET(request: NextRequest) {
       | "all";
     const query = searchParams.get("query") || "";
 
-    const startDate = searchParams.get("startDate")
+    let startDate = searchParams.get("startDate")
       ? new Date(searchParams.get("startDate")!)
       : undefined;
-    const endDate = searchParams.get("endDate")
+    let endDate = searchParams.get("endDate")
       ? new Date(searchParams.get("endDate")!)
       : undefined;
+
+    if (isDashboard && !startDate && !endDate) {
+      const range = getDashboardJobDateRange();
+      startDate = range.startDate;
+      endDate = range.endDate;
+    }
 
     const result = await getJobsWithDetails({
       page,
@@ -59,7 +58,8 @@ export async function GET(request: NextRequest) {
       query,
       startDate,
       endDate,
-      customerId,
+      customerId: scope.customerId,
+      sortByCheckIn: isDashboard ? "asc" : undefined,
     });
 
     return NextResponse.json(result);

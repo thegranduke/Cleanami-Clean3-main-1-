@@ -1,5 +1,5 @@
 
-import { SQL, and, or, ilike, desc, eq, sql } from 'drizzle-orm';
+import { SQL, and, or, ilike, desc, eq, sql, gte, lte } from 'drizzle-orm';
 
 export interface PaginationParams {
   page?: number;
@@ -67,8 +67,8 @@ export const filters = {
   
   byDateRange: (dateField: any, start?: Date, end?: Date) => {
     const conditions: SQL[] = [];
-    if (start) conditions.push(sql`${dateField} >= ${start}`);
-    if (end) conditions.push(sql`${dateField} <= ${end}`);
+    if (start) conditions.push(gte(dateField, start));
+    if (end) conditions.push(lte(dateField, end));
     return conditions.length > 0 ? and(...conditions) : undefined;
   },
   

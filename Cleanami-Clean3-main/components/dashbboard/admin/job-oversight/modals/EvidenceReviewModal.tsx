@@ -50,6 +50,7 @@ export function EvidenceReviewModal({
 
             {/* Image display */}
             <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ minHeight: '400px' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- dynamic evidence URLs */}
               <img
                 src={photoUrls[activeIndex]}
                 alt={`Evidence photo ${activeIndex + 1}`}
@@ -90,6 +91,7 @@ export function EvidenceReviewModal({
                       index === activeIndex ? 'border-teal-500' : 'border-gray-300'
                     }`}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- dynamic evidence URLs */}
                     <img
                       src={url}
                       alt={`Thumbnail ${index + 1}`}

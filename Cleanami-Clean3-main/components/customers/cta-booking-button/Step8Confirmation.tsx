@@ -1,3 +1,4 @@
+import Link from "next/link";
 import GoogleConversionTracking from "@/components/ConversionTracking";
 import { CheckCircle, Sparkles } from "lucide-react";
 
@@ -5,12 +6,14 @@ interface Step8ConfirmationProps {
   paymentIntentId?: string;
   amount?: number;
   currency?: string;
+  portalInviteEmailSent?: boolean;
 }
 
 export const Step8Confirmation = ({ 
   paymentIntentId, 
   amount, 
-  currency = 'CHF' 
+  currency = 'CHF',
+  portalInviteEmailSent = true,
 }: Step8ConfirmationProps) => {
   return (
     <div className="text-center py-8 px-4">
@@ -26,9 +29,33 @@ export const Step8Confirmation = ({
       </div>
       <h2 className="mt-6 text-2xl font-bold text-gray-800">Setup Complete!</h2>
       <p className="mt-2 text-gray-600 max-w-md mx-auto">
-        Congratulations! Your subscription is active, and your first cleaning is
-        prepaid and ready to be scheduled.
+        Congratulations! Your subscription is active and your first cleaning is
+        prepaid.
       </p>
+
+      {portalInviteEmailSent ? (
+        <p className="mt-6 text-sm text-gray-600 max-w-md mx-auto">
+          Check your email for a link to sign in to your customer portal. You can
+          set a password or use the magic link we sent.
+        </p>
+      ) : (
+        <p className="mt-6 text-sm text-gray-600 max-w-md mx-auto">
+          Your portal is ready. Sign in at{" "}
+          <Link href="/sign-in" className="font-semibold text-brand">
+            /sign-in
+          </Link>{" "}
+          with the email you used for booking, or contact support if you need a
+          new login link.
+        </p>
+      )}
+
+      <Link
+        href="/sign-in"
+        className="mt-4 inline-flex rounded-lg border border-brand px-6 py-3 text-sm font-semibold text-brand hover:bg-brand/5"
+      >
+        Go to sign in
+      </Link>
+
       <div className="mt-8 bg-white border border-gray-200 rounded-lg p-6 max-w-sm mx-auto">
         <div className="flex items-center">
           <div className="bg-teal-500 p-2 rounded-full mr-4">
@@ -39,7 +66,7 @@ export const Step8Confirmation = ({
               What&apos;s Next?
             </h4>
             <p className="text-left text-sm text-gray-600">
-              We&apos;ll monitor your iCal and automatically schedule your turnovers. We&apos;ll call you after booking to welcome you!
+              We&apos;ll monitor your iCal and automatically schedule your turnovers.
             </p>
           </div>
         </div>

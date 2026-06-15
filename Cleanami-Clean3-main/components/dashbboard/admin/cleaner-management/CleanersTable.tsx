@@ -2,22 +2,26 @@
 
 import { ChevronDownIcon, ChevronsUpDown, ChevronUpIcon, UserIcon } from "lucide-react";
 import { CleanersResponse } from "@/lib/queries/cleaners"; 
+import { formatContactValue } from "@/components/dashbboard/admin/ui/formatContact";
 import { formatDate } from "date-fns";
 
 type Cleaner = CleanersResponse['data'][number];
 
-const getStatusBadge = (status: "available" | "unavailable" | "on_job" | string | null | undefined) => {
+const getStatusBadge = (status: string | null | undefined) => {
   switch (status) {
+    case 'active': return 'bg-green-100 text-green-800';
+    case 'stripe_pending': return 'bg-indigo-100 text-indigo-800';
+    case 'onboarding_in_progress': return 'bg-yellow-100 text-yellow-800';
+    case 'suspended': return 'bg-red-100 text-red-800';
     case 'available': return 'bg-green-100 text-green-800';
     case 'on_job': return 'bg-blue-100 text-blue-800';
-    case 'unavailable': return 'bg-yellow-100 text-yellow-800';
-    case 'Suspended': return 'bg-red-100 text-red-800';
+    case 'unavailable': return 'bg-gray-100 text-gray-800';
     default: return 'bg-gray-100 text-gray-800';
   }
 };
 
 export type SortDirection = 'ascending' | 'descending';
-export type SortableKey = 'fullName' | 'onCallStatus' | 'createdAt';
+export type SortableKey = 'fullName' | 'email' | 'phone' | 'accountStatus' | 'createdAt';
 
 export interface SortConfig {
   key: SortableKey;
@@ -31,11 +35,13 @@ interface CleanersTableProps {
   onManageCleaner: (cleaner: Cleaner) => void;
 }
 
-export const CleanersTable = ({ cleaners, sortConfig, onSort, onManageCleaner }: CleanersTableProps) => {
+export const CleanersTable = ({ cleaners, sortConfig, onSort }: CleanersTableProps) => {
   const headers: { key: SortableKey; label: string }[] = [
     { key: 'fullName', label: 'Name' },
-    { key: 'onCallStatus', label: 'Status' },
-    { key: 'createdAt', label: 'Join Date' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'accountStatus', label: 'Status' },
+    { key: 'createdAt', label: 'Joined' },
   ];
 
   return (
@@ -69,8 +75,14 @@ export const CleanersTable = ({ cleaners, sortConfig, onSort, onManageCleaner }:
                   </button>
                 </th>
               ))}
-              <th scope="col" className="relative px-6 py-3">
-                <span className="sr-only">Actions</span>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Onboarding
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Stripe
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Reliability
               </th>
             </tr>
           </thead>
@@ -86,30 +98,39 @@ export const CleanersTable = ({ cleaners, sortConfig, onSort, onManageCleaner }:
                       <div className="text-sm font-medium text-gray-900">
                         {cleaner.fullName}
                       </div>
-                      <div className="text-sm text-gray-500">{cleaner.email}</div>
                     </div>
                   </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {formatContactValue(cleaner.email)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {formatContactValue(cleaner.phone)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span
                     className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(
-                      cleaner.onCallStatus
+                      cleaner.accountStatus
                     )}`}
                   >
-                    {cleaner.onCallStatus?.replace('_', ' ') || 'N/A'}
+                    {cleaner.accountStatus?.replaceAll('_', ' ') || 'N/A'}
                   </span>
                 </td>
                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {formatDate(cleaner.createdAt, 'yyyy-MM-dd')}
                 </td>
-                {/* <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => onManageCleaner(cleaner)}
-                    className="text-teal-600 hover:text-teal-900"
-                  >
-                    Manage
-                  </button>
-                </td> */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {cleaner.onboardingCompleted ? 'Complete' : cleaner.onboardingStarted ? 'In progress' : 'Not started'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600">
+                  <div>Payouts: {cleaner.stripePayoutsEnabled ? 'Yes' : 'No'}</div>
+                  <div className="text-gray-400 truncate max-w-[140px]">
+                    {cleaner.stripeAccountId ?? '—'}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  {cleaner.reliabilityScore ? `${cleaner.reliabilityScore}%` : '—'}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -118,4 +139,3 @@ export const CleanersTable = ({ cleaners, sortConfig, onSort, onManageCleaner }:
     </div>
   );
 };
-

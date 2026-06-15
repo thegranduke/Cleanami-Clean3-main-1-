@@ -15,7 +15,10 @@ type SubscriptionStatus = Subscription['status'];
 
 // Client-safe fetcher for infinite scrolling
 async function fetchSubscriptions({ pageParam = 1, queryKey }: { pageParam?: number, queryKey: any[] }) {
-  const [_, { status, search }] = queryKey;
+  const { status, search } = queryKey[1] as {
+    status: SubscriptionStatus;
+    search: string;
+  };
   const res = await fetch(`/api/subscriptions?page=${pageParam}&status=${status}&query=${search}`);
   if (!res.ok) {
     throw new Error('Network response was not ok');

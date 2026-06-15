@@ -1,7 +1,7 @@
 import 'server-only';
 import { db } from '@/db';
 import { customers, properties, subscriptions, jobs } from '@/db/schemas';
-import { eq, sql, inArray, count } from 'drizzle-orm';
+import { eq, sql, inArray } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import {
   PaginationParams,
@@ -159,21 +159,6 @@ export async function getCustomerJobHistory({
 
   const propertyIds = customerProperties.map((p) => p.id);
 
-  let totalJobsCount = 0;
-  let completedJobsCount = 0;
-
-  if (propertyIds.length > 0) {
-    const jobCounts = await db
-      .select({
-        total: count(),
-        completed: count(sql`case when ${jobs.status} = 'completed' then 1 end`),
-      })
-      .from(jobs)
-      .where(inArray(jobs.propertyId, propertyIds));
-      
-    totalJobsCount = jobCounts[0].total;
-    completedJobsCount = jobCounts[0].completed;
-  }
   const jobData = await db.query.jobs.findMany({
     where: inArray(jobs.propertyId, propertyIds),
     orderBy: (jobs, { desc }) => [desc(jobs.createdAt)],

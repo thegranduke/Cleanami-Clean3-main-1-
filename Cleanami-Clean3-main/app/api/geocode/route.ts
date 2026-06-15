@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const { db } = await import("@/db");
   const { cleaners, properties } = await import("@/db/schemas");
   const { isNull } = await import("drizzle-orm");

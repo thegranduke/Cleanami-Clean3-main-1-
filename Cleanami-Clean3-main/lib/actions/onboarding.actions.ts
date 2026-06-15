@@ -14,6 +14,7 @@ import { ICalService } from "../services/iCal/ical.service";
 import { eq } from "drizzle-orm";
 import { getStripe } from "@/lib/stripe/get-stripe";
 import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
+import { inviteCustomerToPortalAfterPayment } from "@/lib/services/auth/customer-account.service";
 
 async function geocodeAddress(address: string): Promise<{ latitude: string; longitude: string } | null> {
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -88,6 +89,12 @@ export async function completeOnboarding(
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     const stripeCustomerId = typeof paymentIntent.customer === 'string' ? paymentIntent.customer : null;
 
+    if (paymentIntent.status !== "succeeded") {
+      throw new Error(
+        "Payment has not completed successfully. Customer portal access cannot be granted."
+      );
+    }
+
     if (!stripeCustomerId) {
       throw new Error("Critical: Could not find a Stripe Customer ID associated with this payment.");
     }
@@ -110,8 +117,6 @@ export async function completeOnboarding(
       checklistFile,
       useDefaultChecklist,
       iCalUrl,
-      defaultCheckInTime,
-      defaultCheckOutTime,
       firstCleanDate,
     } = validatedData;
 
@@ -136,14 +141,16 @@ export async function completeOnboarding(
           name, 
           email, 
           phone: phoneNumber,
-          stripeCustomerId
+          stripeCustomerId,
+          portalAccessEnabled: true,
         })
         .onConflictDoUpdate({
           target: customers.email,
           set: { 
             name, 
             phone: phoneNumber, 
-            stripeCustomerId, 
+            stripeCustomerId,
+            portalAccessEnabled: true,
             updatedAt: new Date() 
           },
         })
@@ -309,11 +316,21 @@ export async function completeOnboarding(
       fileUploadResults
     });
 
+    const accountResult = await inviteCustomerToPortalAfterPayment({
+      email,
+      name,
+    });
+
+    if (!accountResult.success) {
+      throw new Error(accountResult.error);
+    }
+
     return { 
       success: true, 
       data: {
         ...result,
-        fileUploadResults
+        fileUploadResults,
+        portalInviteEmailSent: accountResult.emailSent,
       }
     };
 

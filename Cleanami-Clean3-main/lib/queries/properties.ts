@@ -2,7 +2,7 @@
 import 'server-only';
 import { db } from '@/db';
 import { properties, customers, subscriptions, jobs } from '@/db/schemas';
-import { eq, sql, and, desc } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import {
   PaginationParams,
@@ -44,6 +44,7 @@ export async function getPropertiesWithOwner({
         id: customers.id,
         name: customers.name,
         email: customers.email,
+        phone: customers.phone,
       },
 
       activeSubscription: sql<{
@@ -101,7 +102,7 @@ export async function getPropertiesWithOwner({
     .where(
       and(
         customerId ? eq(properties.customerId, customerId) : undefined,
-        buildSearchCondition(query, [properties.address, customers.name])
+        buildSearchCondition(query, [properties.address, customers.name, customers.email, customers.phone])
       )
     )
     .orderBy(ordering.createdAtDesc(properties))

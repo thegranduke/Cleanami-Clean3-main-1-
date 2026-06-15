@@ -3,34 +3,21 @@ import { getSubscriptionsWithDetails } from "@/lib/queries/subscriptions";
 import { createClient } from "@/lib/supabase/server";
 import {
   customerAuthErrorStatus,
-  getCustomerAuth,
+  resolvePortalCustomerScope,
 } from "@/lib/customer-auth";
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
-    const user = data?.claims;
-    const userRole = user?.user_metadata?.role;
+    const userRole = data?.claims?.user_metadata?.role as string | undefined;
 
-    const isAdmin = userRole === "admin" || userRole === "super_admin";
-    const isCustomer = userRole === "user";
-
-    if (!isAdmin && !isCustomer) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    let customerId: string | undefined;
-
-    if (isCustomer) {
-      const { customerId: resolvedCustomerId, error } = await getCustomerAuth();
-      if (!resolvedCustomerId) {
-        return NextResponse.json(
-          { error: error ?? "Unauthorized", data: [], nextPage: null },
-          { status: customerAuthErrorStatus(error) }
-        );
-      }
-      customerId = resolvedCustomerId;
+    const scope = await resolvePortalCustomerScope(request, userRole);
+    if (scope.error) {
+      return NextResponse.json(
+        { error: scope.error, data: [], nextPage: null },
+        { status: customerAuthErrorStatus(scope.error) }
+      );
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -49,7 +36,7 @@ export async function GET(request: NextRequest) {
       limit,
       status,
       query,
-      customerId,
+      customerId: scope.customerId,
     });
 
     return NextResponse.json(result);

@@ -26,7 +26,10 @@ export type SessionResponse = {
 };
 
 // Form data fields that can be serialized to JSON (excludes File objects)
-type SerializableFormData = Omit<SignupFormData, "checklistFile" | "firstCleanDate"> & {
+type SerializableFormData = Omit<
+  SignupFormData,
+  "checklistFile" | "firstCleanDate"
+> & {
   firstCleanDate?: string; // ISO string
   hasChecklist?: boolean; // Flag instead of actual files
 };
@@ -51,7 +54,9 @@ function serializeFormData(formData: Partial<SignupFormData>): SerializableFormD
 }
 
 function deserializeFormData(data: Record<string, unknown>): Partial<SignupFormData> {
-  const { firstCleanDate, hasChecklist, ...rest } = data as SerializableFormData;
+  const serialized = data as SerializableFormData;
+  const { firstCleanDate, hasChecklist, ...rest } = serialized;
+  void hasChecklist;
   return {
     ...rest,
     firstCleanDate: firstCleanDate ? new Date(firstCleanDate) : undefined,

@@ -1,4 +1,4 @@
-import { TeamMemberCard, ValueCard } from "@/components/about";
+import { ValueCard } from "@/components/about";
 
 import { CTA } from "@/components/home";
 import { FounderSection } from "@/components/home/FounderSection";

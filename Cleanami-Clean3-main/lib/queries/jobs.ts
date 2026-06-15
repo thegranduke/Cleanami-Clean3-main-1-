@@ -2,7 +2,7 @@
 import 'server-only';
 import { db } from '@/db';
 import { jobs, properties, subscriptions, jobsToCleaners, cleaners, evidencePackets, payouts } from '@/db/schemas';
-import { eq, sql, and, gte, lte } from 'drizzle-orm';
+import { eq, sql, and, gte, lte, asc, desc } from 'drizzle-orm';
 import {
   PaginationParams,
   SearchParams,
@@ -22,6 +22,8 @@ interface GetJobsParams extends PaginationParams, SearchParams {
   propertyId?: string;
   cleanerId?: string;
   customerId?: string;
+  /** When set, orders by check-in time instead of created-at. */
+  sortByCheckIn?: 'asc' | 'desc';
 }
 
 export async function getJobsWithDetails({
@@ -34,6 +36,7 @@ export async function getJobsWithDetails({
   propertyId,
   cleanerId,
   customerId,
+  sortByCheckIn,
 }: GetJobsParams) {
   const offset = getPaginationOffset(page, limit);
 
@@ -125,7 +128,13 @@ export async function getJobsWithDetails({
         buildSearchCondition(query, [properties.address])
       )
     )
-    .orderBy(ordering.createdAtDesc(jobs))
+    .orderBy(
+      sortByCheckIn === 'asc'
+        ? asc(jobs.checkInTime)
+        : sortByCheckIn === 'desc'
+          ? desc(jobs.checkInTime)
+          : ordering.createdAtDesc(jobs)
+    )
     .limit(limit)
     .offset(offset);
 

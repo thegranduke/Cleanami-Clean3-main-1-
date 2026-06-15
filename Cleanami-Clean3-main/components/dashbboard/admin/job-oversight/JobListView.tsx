@@ -282,7 +282,7 @@ type FetchJobsContext = {
 
 async function fetchJobs(context: FetchJobsContext) {
   const { pageParam = 1, queryKey } = context;
-  const [_, { status, query }] = queryKey;
+  const { status, query } = queryKey[1] as { status: JobStatus; query: string };
   const params = new URLSearchParams({ page: String(pageParam), limit: "15" });
 
   if (status !== "all") {

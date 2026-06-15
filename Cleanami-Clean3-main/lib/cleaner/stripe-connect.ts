@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/db";
 import { cleaners } from "@/db/schemas";
+import { applyStripeAccountState } from "@/lib/cleaner/stripe-account-state";
 import { stripe } from "@/lib/stripe/config";
 import { eq } from "drizzle-orm";
 
@@ -45,8 +46,8 @@ export async function createStripeOnboardingLink(cleanerId: string) {
   const baseUrl = getAppBaseUrl();
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
-    refresh_url: `${baseUrl}/cleaner/profile?stripe=refresh`,
-    return_url: `${baseUrl}/cleaner/profile?stripe=complete`,
+    refresh_url: `${baseUrl}/cleaner/onboarding?stripe=refresh`,
+    return_url: `${baseUrl}/cleaner/onboarding?stripe=complete`,
     type: "account_onboarding",
   });
 
@@ -65,18 +66,12 @@ export async function syncStripeOnboardingStatus(cleanerId: string) {
 
   try {
     const account = await stripe.accounts.retrieve(cleaner.stripeAccountId);
-    const complete =
+    await applyStripeAccountState(cleanerId, account);
+    return (
       account.details_submitted === true &&
-      account.charges_enabled === true;
-
-    if (complete && !cleaner.stripeOnboardingComplete) {
-      await db
-        .update(cleaners)
-        .set({ stripeOnboardingComplete: true, updatedAt: new Date() })
-        .where(eq(cleaners.id, cleanerId));
-    }
-
-    return complete;
+      account.charges_enabled === true &&
+      account.payouts_enabled === true
+    );
   } catch {
     return cleaner.stripeOnboardingComplete ?? false;
   }

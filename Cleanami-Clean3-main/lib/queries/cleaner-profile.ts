@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/db";
-import { cleaners, cleanerBadges, badges } from "@/db/schemas";
+import { cleaners } from "@/db/schemas";
 import { syncStripeOnboardingStatus } from "@/lib/cleaner/stripe-connect";
 import { eq } from "drizzle-orm";
 

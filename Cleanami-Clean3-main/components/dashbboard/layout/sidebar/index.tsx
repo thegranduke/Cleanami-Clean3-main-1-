@@ -140,7 +140,7 @@ const triggerAssignmentEngine = async () => {
     if (data.success) {
       setTimeout(() => setAssignmentResult(null), 5000)
     }
-  } catch (error) {
+  } catch {
     setAssignmentResult({ success: false, error: "Network error" })
   } finally {
     setAssignmentLoading(false)

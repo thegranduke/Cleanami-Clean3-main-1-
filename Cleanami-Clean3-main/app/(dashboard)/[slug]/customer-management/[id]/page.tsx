@@ -4,9 +4,10 @@ import { PaymentHistory } from "@/components/dashbboard/admin/customer-managemen
 import { Services } from "@/components/dashbboard/admin/customer-management/Services";
 import { Subscriptions } from "@/components/dashbboard/admin/customer-management/Subscriptions";
 import { CustomerProperties } from "@/components/dashbboard/admin/customer-management/CustomerProperties";
-import { ClipboardListIcon, CreditCardIcon, DollarSign, House, SparkleIcon } from "lucide-react";
+import { ClipboardListIcon, CreditCardIcon, DollarSign, House, MailIcon, PhoneIcon, SparkleIcon } from "lucide-react";
 import Link from "next/link";
 import { getCustomerDetails } from "@/lib/queries/customers";
+import { formatContactValue } from "@/components/dashbboard/admin/ui/formatContact";
 
 
 // FIX: The dynamic parameter from the folder name '[id]' is `params.id`.
@@ -29,6 +30,18 @@ export default async function Page({
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-gray-800">{customerDetails.name}</h2>
         <p className="text-sm text-gray-500 font-mono">{customerDetails.id}</p>
+        <div className="mt-4 flex flex-col gap-2 text-sm text-gray-600 sm:flex-row sm:gap-8">
+          <p className="flex items-center gap-2">
+            <MailIcon className="h-4 w-4 text-teal-600" />
+            <span className="font-medium text-gray-700">Email:</span>
+            {formatContactValue(customerDetails.email)}
+          </p>
+          <p className="flex items-center gap-2">
+            <PhoneIcon className="h-4 w-4 text-teal-600" />
+            <span className="font-medium text-gray-700">Phone:</span>
+            {formatContactValue(customerDetails.phone)}
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

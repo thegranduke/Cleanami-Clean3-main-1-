@@ -10,35 +10,6 @@ interface SubscriptionModalProps {
   onUpdate: (subscription: Subscription) => void;
 }
 
-const ToggleSwitch = ({
-  label,
-  enabled,
-  onChange,
-}: {
-  label: string;
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-}) => (
-  <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg border border-gray-200">
-    <span className="text-sm font-medium text-gray-700">{label}</span>
-    <button
-      type="button"
-      className={`${
-        enabled ? "bg-teal-600" : "bg-gray-200"
-      } relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500`}
-      role="switch"
-      aria-checked={enabled}
-      onClick={() => onChange(!enabled)}
-    >
-      <span
-        className={`${
-          enabled ? "translate-x-6" : "translate-x-1"
-        } inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}
-      />
-    </button>
-  </div>
-);
-
 export const SubscriptionDetailModal = ({
   subscription,
   onClose,
@@ -75,8 +46,8 @@ export const SubscriptionDetailModal = ({
   }, [onClose]);
 
   const handleSave = () => {
-    // Remove autoRenew before passing to onUpdate since it's not part of Subscription type
     const { autoRenew, ...subscriptionData } = localSub;
+    void autoRenew;
     onUpdate(subscriptionData);
   };
 
@@ -89,18 +60,6 @@ export const SubscriptionDetailModal = ({
     setLocalSub((prev) => ({ ...prev, autoRenew: false }));
     setIsConfirmingCancel(false);
   };
-
-  const ActionButton = ({
-    onClick, text, className, disabled,
-  }: { onClick: () => void; text: string; className: string; disabled?: boolean; }) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full text-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium text-white ${className} disabled:opacity-50 disabled:cursor-not-allowed`}
-    >
-      {text}
-    </button>
-  );
 
   return (
     <>

@@ -1,6 +1,5 @@
 import "server-only";
 
-import type { Database } from "@/db";
 import { getDbOrNull } from "@/db";
 import { cleaners, jobsToCleaners, users } from "@/db/schemas";
 import { createClient } from "@/lib/supabase/server";
@@ -13,72 +12,10 @@ export type CleanerAuthResult = {
 };
 
 const PROFILE_NOT_FOUND_MESSAGE =
-  "We could not load your cleaner profile. Try signing out and back in, or contact support.";
+  "We could not load your cleaner profile. Complete cleaner sign-up with your approved invitation email, or contact support.";
 
-const PROFILE_SETUP_FAILED_MESSAGE =
-  "Your account exists but we could not finish setting up your cleaner profile. Please try again or contact support.";
-
-async function resolveCleanerEmail(
-  claims: Record<string, unknown>
-): Promise<string | null> {
-  if (typeof claims.email === "string" && claims.email.length > 0) {
-    return claims.email;
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user?.email) {
-    return null;
-  }
-
-  return data.user.email;
-}
-
-async function ensureCleanerProfile(
-  database: Database,
-  supabaseUserId: string,
-  email: string,
-  displayName: string
-): Promise<string | null> {
-  let dbUser = await database.query.users.findFirst({
-    where: eq(users.supabaseUserId, supabaseUserId),
-    columns: { id: true },
-  });
-
-  if (!dbUser) {
-    const [insertedUser] = await database
-      .insert(users)
-      .values({
-        supabaseUserId,
-        email,
-        role: "cleaner",
-        name: displayName,
-      })
-      .returning({ id: users.id });
-
-    dbUser = insertedUser;
-  }
-
-  let cleaner = await database.query.cleaners.findFirst({
-    where: eq(cleaners.userId, dbUser.id),
-    columns: { id: true },
-  });
-
-  if (!cleaner) {
-    const [insertedCleaner] = await database
-      .insert(cleaners)
-      .values({
-        userId: dbUser.id,
-        email,
-        fullName: displayName,
-      })
-      .returning({ id: cleaners.id });
-
-    cleaner = insertedCleaner;
-  }
-
-  return cleaner.id;
-}
+const INVITATION_REQUIRED_MESSAGE =
+  "Your email has not been approved for cleaner access. Please contact CleanNami.";
 
 /**
  * Resolves the authenticated cleaner's ID from the current session.
@@ -108,42 +45,24 @@ export async function getCleanerAuth(): Promise<CleanerAuthResult> {
     columns: { id: true },
   });
 
-  if (dbUser) {
-    const cleaner = await database.query.cleaners.findFirst({
-      where: eq(cleaners.userId, dbUser.id),
-      columns: { id: true },
-    });
-
-    if (cleaner) {
-      return { cleanerId: cleaner.id, error: null };
-    }
-  }
-
-  const email = await resolveCleanerEmail(claims);
-  if (!email) {
+  if (!dbUser) {
     return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
   }
 
-  const metadata = claims.user_metadata as
-    | { full_name?: string; name?: string }
-    | undefined;
-  const displayName =
-    metadata?.full_name?.trim() ||
-    metadata?.name?.trim() ||
-    email.split("@")[0];
+  const cleaner = await database.query.cleaners.findFirst({
+    where: eq(cleaners.userId, dbUser.id),
+    columns: { id: true, invitationId: true },
+  });
 
-  try {
-    const cleanerId = await ensureCleanerProfile(
-      database,
-      claims.sub,
-      email,
-      displayName
-    );
-    return { cleanerId, error: null };
-  } catch (profileError) {
-    console.error("[getCleanerAuth] Failed to provision cleaner profile:", profileError);
-    return { cleanerId: null, error: PROFILE_SETUP_FAILED_MESSAGE };
+  if (!cleaner) {
+    return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
   }
+
+  if (!cleaner.invitationId) {
+    return { cleanerId: null, error: INVITATION_REQUIRED_MESSAGE };
+  }
+
+  return { cleanerId: cleaner.id, error: null };
 }
 
 export async function requireCleanerJobAssignment(
@@ -172,8 +91,7 @@ export async function requireCleanerJobAssignment(
 export function cleanerAuthErrorStatus(error: string | null): number {
   if (
     error === SERVICE_UNAVAILABLE.database ||
-    error?.toLowerCase().includes("profile") ||
-    error?.toLowerCase().includes("setting up your cleaner")
+    error?.toLowerCase().includes("profile")
   ) {
     return 503;
   }

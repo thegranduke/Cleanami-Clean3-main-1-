@@ -1,9 +1,17 @@
 
 import { pgTable, uuid, timestamp, text, integer, boolean, numeric, jsonb, index, pgEnum } from "drizzle-orm/pg-core";
 import { users } from "./users.schema";
+import { cleanerInvitations } from "./cleanerInvitations.schema";
 
 // Enum for on-call status as requested
 export const onCallStatusEnum = pgEnum('on_call_status', ['available', 'unavailable', 'on_job']);
+
+export const cleanerAccountStatusEnum = pgEnum('cleaner_account_status', [
+  'onboarding_in_progress',
+  'stripe_pending',
+  'active',
+  'suspended',
+]);
 
 export const cleaners = pgTable("cleaners", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -20,6 +28,16 @@ export const cleaners = pgTable("cleaners", {
   onCallStatus: onCallStatusEnum("on_call_status").default('unavailable'),
   stripeAccountId: text("stripe_account_id").unique(),
   stripeOnboardingComplete: boolean("stripe_onboarding_complete").default(false),
+  stripeChargesEnabled: boolean("stripe_charges_enabled").default(false).notNull(),
+  stripePayoutsEnabled: boolean("stripe_payouts_enabled").default(false).notNull(),
+  stripeOnboardingCompletedAt: timestamp("stripe_onboarding_completed_at"),
+  accountStatus: cleanerAccountStatusEnum("account_status").default('onboarding_in_progress').notNull(),
+  invitationId: uuid("invitation_id").references(() => cleanerInvitations.id, { onDelete: 'set null' }),
+  onboardingStarted: boolean("onboarding_started").default(false).notNull(),
+  onboardingStartedAt: timestamp("onboarding_started_at"),
+  onboardingCompleted: boolean("onboarding_completed").default(false),
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+  activatedAt: timestamp("activated_at"),
   latitude: numeric("latitude", { precision: 10, scale: 8 }),
   longitude: numeric("longitude", { precision: 11, scale: 8 }),
   geocodedAt: timestamp("geocoded_at"),
@@ -27,8 +45,8 @@ export const cleaners = pgTable("cleaners", {
     w9Url: string | null;
     liabilityWaiverUrl: string | null;
     gpsConsentUrl: string | null;
+    contractorAgreementUrl?: string | null;
   }>().default({ w9Url: null, liabilityWaiverUrl: null, gpsConsentUrl: null }),
-  onboardingCompleted: boolean("onboarding_completed").default(false),
   onboardingStep: integer("onboarding_step").default(1),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),

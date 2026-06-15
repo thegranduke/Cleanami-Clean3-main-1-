@@ -10,25 +10,33 @@ export const hasEnvVars =
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function formatError(error: any) {
+export function formatError(error: unknown) {
   if (error instanceof ZodError) {
     const fieldErrors = error.issues.map(
       (issue) => issue.message
     );
     return fieldErrors.join('. ');
-  } else if (
-    error.code === '23505'
-  ) {
-    const constraintName = error.constraint || '';
-    if (constraintName.includes('email')) {
-      return 'Email already exists';
-    }
-    return 'Record already exists';
-  } else {
-    
-    return typeof error?.message === 'string'
-      ? error.message
-      : JSON.stringify(error?.message || error);
   }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "23505"
+  ) {
+    const constraintName =
+      "constraint" in error && typeof error.constraint === "string"
+        ? error.constraint
+        : "";
+    if (constraintName.includes("email")) {
+      return "Email already exists";
+    }
+    return "Record already exists";
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return typeof error === "string" ? error : "An unexpected error occurred";
 }

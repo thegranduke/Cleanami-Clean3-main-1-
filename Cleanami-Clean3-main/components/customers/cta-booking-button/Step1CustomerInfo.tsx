@@ -74,7 +74,8 @@ export const Step1CustomerInfo = ({
       {/* Why we ask - per spec */}
       <p className="text-xs text-gray-500">
         <span className="font-medium">Why we ask for this:</span> This lets us save 
-        your progress and help you if you need it.
+        your progress and help you if you need it. After payment, we&apos;ll email you a
+        link to access your customer portal.
       </p>
 
       <StepFeedback

@@ -21,9 +21,19 @@ export const PRIVATE_ADMIN_NAV_ROUTES = [
     route: "/admin/dashboard",
   },
   {
+    icon: <House className="h-6 w-6" />,
+    label: "my property",
+    route: "/customer/dashboard",
+  },
+  {
     icon: <UsersIcon />,
     label: "cleaner mgmt",
     route: "/admin/cleaner-management",
+  },
+  {
+    icon: <UsersIcon />,
+    label: "cleaner invites",
+    route: "/admin/cleaner-invitations",
   },
   {
     icon: <ClipboardListIcon />,

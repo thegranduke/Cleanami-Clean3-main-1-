@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import type { JobDetails } from '@/lib/queries/jobs';
 
 type ChecklistItem = {
@@ -53,6 +52,7 @@ export function EvidenceReviewSection({
                   onClick={() => onReviewPhoto(item.photoIndex!)}
                   className="flex items-center text-sm font-medium text-teal-600 hover:text-teal-800"
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- dynamic evidence URLs */}
                   <img
                     src={evidencePacket.photoUrls[item.photoIndex]}
                     alt="Evidence thumbnail"

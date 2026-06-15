@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader } from "lucide-react";
-import { formatDateRange } from "@/lib/cleaner/availability-deadline";
+import {
+  formatDateRange,
+  formatSubmissionSundayLabel,
+} from "@/lib/cleaner/availability-deadline";
 import { parseCleanerApiError } from "@/lib/cleaner/parse-api-error";
 import { CleanerPageMessage } from "@/components/cleaner/CleanerPageMessage";
 import { cn } from "@/lib/utils";
@@ -12,16 +15,26 @@ type AvailabilityDay = {
   label: string;
   isAvailable: boolean;
   onCallEligible: boolean;
+  openPoolEligible: boolean;
 };
 
 type AvailabilityResponse = {
   period: { start: string; end: string; dates: string[] };
   days: AvailabilityDay[];
+  displayMode: "submit" | "locked" | "preview";
   deadline: {
     pastDeadline: boolean;
+    lateStatus: "on_time" | "late_accepted" | "late_warning" | null;
     isGracePeriod: boolean;
     rejected: boolean;
+    canSubmitRegular: boolean;
+    canEditPreferences: boolean;
+    offWeekSunday: boolean;
+    closedReason: string | null;
+    submissionSunday: string;
+    nextSubmissionSunday: string;
   };
+  closedMessage?: string | null;
 };
 
 export function AvailabilityPageClient() {
@@ -29,6 +42,8 @@ export function AvailabilityPageClient() {
   const [period, setPeriod] = useState<{ start: string; end: string } | null>(
     null
   );
+  const [displayMode, setDisplayMode] =
+    useState<AvailabilityResponse["displayMode"]>("preview");
   const [deadline, setDeadline] = useState<AvailabilityResponse["deadline"] | null>(
     null
   );
@@ -39,7 +54,22 @@ export function AvailabilityPageClient() {
   const [loadErrorVariant, setLoadErrorVariant] = useState<"warning" | "error">(
     "warning"
   );
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [closedMessage, setClosedMessage] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const canSaveRegular = deadline?.canSubmitRegular ?? false;
+  const canSavePreferences = deadline?.canEditPreferences ?? false;
+  const canSave = canSaveRegular || canSavePreferences;
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -56,7 +86,9 @@ export function AvailabilityPageClient() {
         }
         setDays(data.days);
         setPeriod({ start: data.period.start, end: data.period.end });
+        setDisplayMode(data.displayMode);
         setDeadline(data.deadline);
+        setClosedMessage(data.closedMessage ?? null);
       } catch {
         setLoadError("Could not load availability. Please refresh and try again.");
         setLoadErrorVariant("error");
@@ -69,7 +101,9 @@ export function AvailabilityPageClient() {
 
   function updateDay(
     date: string,
-    patch: Partial<Pick<AvailabilityDay, "isAvailable" | "onCallEligible">>
+    patch: Partial<
+      Pick<AvailabilityDay, "isAvailable" | "onCallEligible" | "openPoolEligible">
+    >
   ) {
     setDays((prev) =>
       prev.map((day) => {
@@ -77,29 +111,55 @@ export function AvailabilityPageClient() {
         const next = { ...day, ...patch };
         if (patch.isAvailable === false) {
           next.onCallEligible = false;
+          next.openPoolEligible = false;
         }
         return next;
       })
     );
-    setSuccessMessage(null);
+    setJustSaved(false);
+    setSaveNotice(null);
+    if (savedTimerRef.current) {
+      clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = null;
+    }
   }
 
   async function handleSave() {
+    if (saving || justSaved || !canSave) return;
+
     setSaving(true);
     setError(null);
-    setSuccessMessage(null);
+    setJustSaved(false);
+    setSaveNotice(null);
+
+    const isPreferencesOnly = canSavePreferences && !canSaveRegular;
 
     try {
       const response = await fetch("/api/cleaner/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          days: days.map((d) => ({
-            date: d.date,
-            isAvailable: d.isAvailable,
-            onCallEligible: d.onCallEligible,
-          })),
-        }),
+        body: JSON.stringify(
+          isPreferencesOnly
+            ? {
+                mode: "preferences",
+                preferences: days
+                  .filter((d) => d.isAvailable)
+                  .map((d) => ({
+                    date: d.date,
+                    onCallEligible: d.onCallEligible,
+                    openPoolEligible: d.openPoolEligible,
+                  })),
+              }
+            : {
+                mode: "full",
+                days: days.map((d) => ({
+                  date: d.date,
+                  isAvailable: d.isAvailable,
+                  onCallEligible: d.onCallEligible,
+                  openPoolEligible: d.openPoolEligible,
+                })),
+              }
+        ),
       });
 
       const data = await response.json();
@@ -107,10 +167,18 @@ export function AvailabilityPageClient() {
         throw new Error(data.error ?? "Save failed");
       }
 
-      setSuccessMessage(
-        data.message ??
-          `Availability saved for ${period ? formatDateRange(period.start, period.end) : "this period"}`
-      );
+      if (data.lateMessage) {
+        setSaveNotice(data.lateMessage);
+      }
+
+      setJustSaved(true);
+      if (savedTimerRef.current) {
+        clearTimeout(savedTimerRef.current);
+      }
+      savedTimerRef.current = setTimeout(() => {
+        setJustSaved(false);
+        savedTimerRef.current = null;
+      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -142,98 +210,158 @@ export function AvailabilityPageClient() {
         <h1 className="text-xl font-bold text-gray-900">Availability</h1>
         <p className="text-sm text-gray-500">
           {period
-            ? `Next 2 weeks: ${formatDateRange(period.start, period.end)}`
-            : "Set your availability for the next two weeks"}
+            ? `2-week block: ${formatDateRange(period.start, period.end)}`
+            : "Set your availability for the next two-week block"}
         </p>
+        {canSaveRegular && (
+          <p className="mt-1 text-sm text-gray-600">
+            Submit by{" "}
+            {formatSubmissionSundayLabel(deadline!.submissionSunday)} at 6 PM ET
+            {deadline?.lateStatus === "late_warning" ? " (late — grace period)" : ""}
+            {deadline?.lateStatus === "late_accepted" ? " (just past deadline)" : ""}.
+          </p>
+        )}
       </div>
 
-      {deadline?.pastDeadline && !deadline.rejected && (
+      {deadline?.lateStatus === "late_warning" && canSaveRegular && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Submission is past the deadline. Your availability may not be
-          considered for this period.
+          You are more than 1 hour past the Sunday 6 PM ET deadline. Your
+          submission will be accepted, but late availability may not be fully
+          considered.
         </div>
       )}
 
-      {deadline?.rejected && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          Submissions are closed — more than 24 hours past the Sunday 6 PM
-          deadline. Contact support if you need to update availability.
+      {deadline?.lateStatus === "late_accepted" && canSaveRegular && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          You are just past the 6 PM ET deadline. Your submission will still be
+          accepted.
         </div>
       )}
 
-      {successMessage && (
-        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-          {successMessage}
+      {closedMessage && (
+        <div
+          className={cn(
+            "rounded-xl border px-4 py-3 text-sm",
+            displayMode === "locked"
+              ? "border-indigo-200 bg-indigo-50 text-indigo-900"
+              : "border-slate-200 bg-slate-50 text-slate-800"
+          )}
+        >
+          {closedMessage}
+        </div>
+      )}
+
+      {saveNotice && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {saveNotice}
         </div>
       )}
 
       <ul className="space-y-3">
-        {days.map((day) => (
-          <li
-            key={day.date}
-            className="rounded-xl border bg-white p-4 shadow-sm"
-          >
-            <p className="mb-3 text-sm font-semibold text-gray-900">
-              {day.label}
-            </p>
+        {days.map((day) => {
+          const canEditDayPreferences =
+            canSavePreferences && day.isAvailable && !canSaveRegular;
 
-            <div className="space-y-3">
-              <label className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Available</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={day.isAvailable}
-                  disabled={deadline?.rejected}
-                  onClick={() =>
-                    updateDay(day.date, { isAvailable: !day.isAvailable })
-                  }
-                  className={cn(
-                    "relative h-6 w-11 rounded-full transition-colors",
-                    day.isAvailable ? "bg-brand" : "bg-gray-300",
-                    deadline?.rejected && "opacity-50"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-                      day.isAvailable && "translate-x-5"
-                    )}
-                  />
-                </button>
-              </label>
+          return (
+            <li
+              key={day.date}
+              className="rounded-xl border bg-white p-4 shadow-sm"
+            >
+              <p className="mb-3 text-sm font-semibold text-gray-900">
+                {day.label}
+              </p>
 
-              {day.isAvailable && (
+              <div className="space-y-3">
                 <label className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">On-call</span>
+                  <span className="text-sm text-gray-600">Available</span>
                   <button
                     type="button"
                     role="switch"
-                    aria-checked={day.onCallEligible}
-                    disabled={deadline?.rejected}
+                    aria-checked={day.isAvailable}
+                    disabled={!canSaveRegular}
                     onClick={() =>
-                      updateDay(day.date, {
-                        onCallEligible: !day.onCallEligible,
-                      })
+                      updateDay(day.date, { isAvailable: !day.isAvailable })
                     }
                     className={cn(
                       "relative h-6 w-11 rounded-full transition-colors",
-                      day.onCallEligible ? "bg-indigo-600" : "bg-gray-300",
-                      deadline?.rejected && "opacity-50"
+                      day.isAvailable ? "bg-brand" : "bg-gray-300",
+                      !canSaveRegular && "opacity-50"
                     )}
                   >
                     <span
                       className={cn(
                         "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-                        day.onCallEligible && "translate-x-5"
+                        day.isAvailable && "translate-x-5"
                       )}
                     />
                   </button>
                 </label>
-              )}
-            </div>
-          </li>
-        ))}
+
+                {day.isAvailable && (
+                  <>
+                    <label className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">On-call</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={day.onCallEligible}
+                        disabled={!canSaveRegular && !canEditDayPreferences}
+                        onClick={() =>
+                          updateDay(day.date, {
+                            onCallEligible: !day.onCallEligible,
+                          })
+                        }
+                        className={cn(
+                          "relative h-6 w-11 rounded-full transition-colors",
+                          day.onCallEligible ? "bg-indigo-600" : "bg-gray-300",
+                          !canSaveRegular &&
+                            !canEditDayPreferences &&
+                            "opacity-50"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
+                            day.onCallEligible && "translate-x-5"
+                          )}
+                        />
+                      </button>
+                    </label>
+
+                    <label className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Open Pool</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={day.openPoolEligible}
+                        disabled={!canSaveRegular && !canEditDayPreferences}
+                        onClick={() =>
+                          updateDay(day.date, {
+                            openPoolEligible: !day.openPoolEligible,
+                          })
+                        }
+                        className={cn(
+                          "relative h-6 w-11 rounded-full transition-colors",
+                          day.openPoolEligible ? "bg-teal-600" : "bg-gray-300",
+                          !canSaveRegular &&
+                            !canEditDayPreferences &&
+                            "opacity-50"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
+                            day.openPoolEligible && "translate-x-5"
+                          )}
+                        />
+                      </button>
+                    </label>
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       {error && (
@@ -242,14 +370,29 @@ export function AvailabilityPageClient() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving || deadline?.rejected}
-        className="w-full rounded-lg bg-brand py-3 text-sm font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {saving ? "Saving…" : "Save availability"}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || justSaved || !canSave}
+          className="min-w-40 flex-1 rounded-lg bg-brand py-3 text-sm font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none sm:px-8"
+        >
+          {saving
+            ? "Saving…"
+            : canSaveRegular
+              ? "Save availability"
+              : "Save preferences"}
+        </button>
+        {justSaved && (
+          <span
+            className="text-sm font-semibold text-green-700"
+            role="status"
+            aria-live="polite"
+          >
+            Saved ✓
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import 'server-only';
 import { db } from '@/db';
 import { cleaners, jobs, jobsToCleaners, payouts } from '@/db/schemas';
-import { eq, sql, and, gte } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   PaginationParams,
   SearchParams,
@@ -9,7 +9,6 @@ import {
   buildSearchCondition,
   getPaginationOffset,
   ordering,
-  aggregations,
 } from './utils/queryBuilder';
 
 interface GetCleanersParams extends PaginationParams, SearchParams {}
@@ -43,6 +42,14 @@ export async function getCleaners({
       onCallStatus: cleaners.onCallStatus,
       reliabilityScore: cleaners.reliabilityScore,
       hasHotTubCert: cleaners.hasHotTubCert,
+      accountStatus: cleaners.accountStatus,
+      onboardingCompleted: cleaners.onboardingCompleted,
+      onboardingStarted: cleaners.onboardingStarted,
+      stripeOnboardingComplete: cleaners.stripeOnboardingComplete,
+      stripeChargesEnabled: cleaners.stripeChargesEnabled,
+      stripePayoutsEnabled: cleaners.stripePayoutsEnabled,
+      stripeAccountId: cleaners.stripeAccountId,
+      activatedAt: cleaners.activatedAt,
       createdAt: cleaners.createdAt,
       
       totalJobs: sql<number>`(
