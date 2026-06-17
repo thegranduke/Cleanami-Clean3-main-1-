@@ -3,6 +3,7 @@ import { signInFormSchema, signUpFormSchema } from "@/lib/validations/auth";
 import { z } from "zod";
 import { NewUser } from "@/lib/validations/schemas";
 import { cleaners, users } from "@/db/schemas";
+import { getAppBaseUrl } from "@/lib/app-url";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatError } from "@/lib/utils";
 import { getDbOrNull } from "@/db";
@@ -135,17 +136,30 @@ export class AuthService {
         }
       }
 
+      const signUpOptions: {
+        data: {
+          role: SignUpRole;
+          full_name: string;
+          name: string;
+        };
+        emailRedirectTo?: string;
+      } = {
+        data: {
+          role,
+          full_name: displayName,
+          name: displayName,
+        },
+      };
+
+      if (role === "cleaner") {
+        signUpOptions.emailRedirectTo = `${getAppBaseUrl()}/auth/callback?next=${encodeURIComponent("/cleaner/onboarding")}`;
+      }
+
       const { data: authData, error: authError } =
         await this.supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: {
-              role,
-              full_name: displayName,
-              name: displayName,
-            },
-          },
+          options: signUpOptions,
         });
 
       if (authError) {
@@ -162,6 +176,30 @@ export class AuthService {
           data: authData.user!,
           error: { message: "An unexpected Error occured during sign-up." },
         };
+      }
+
+      if (role === "cleaner" && !authData.session && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const supabaseAdmin = createAdminClient();
+          await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
+            email_confirm: true,
+          });
+
+          const { error: signInError } =
+            await this.supabase.auth.signInWithPassword({
+              email,
+              password,
+            });
+
+          if (signInError) {
+            console.warn(
+              "Cleaner sign-up succeeded but could not establish session:",
+              signInError.message
+            );
+          }
+        } catch (confirmError) {
+          console.warn("Could not auto-confirm cleaner email:", confirmError);
+        }
       }
 
       const authUser = authData.user;

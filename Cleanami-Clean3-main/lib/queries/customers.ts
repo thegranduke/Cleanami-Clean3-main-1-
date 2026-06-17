@@ -1,6 +1,6 @@
 import 'server-only';
 import { db } from '@/db';
-import { customers, properties, subscriptions, jobs } from '@/db/schemas';
+import { customers, properties, jobs } from '@/db/schemas';
 import { eq, sql, inArray } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import {
@@ -31,31 +31,33 @@ export async function getCustomersWithPropertyCount({
       createdAt: customers.createdAt,
       updatedAt: customers.updatedAt,
 
+      // Fully qualify columns — Drizzle strips outer-table qualifiers in SELECT
+      // subqueries (e.g. `${customers.id}` → `"id"`), which breaks correlation.
       propertyCount: sql<number>`(
         SELECT CAST(COUNT(*) AS INTEGER)
-        FROM ${properties}
-        WHERE ${properties.customerId} = ${customers.id}
+        FROM "properties"
+        WHERE "properties"."customer_id" = "customers"."id"
       )`.as('property_count'),
 
       activeSubscriptionCount: sql<number>`(
         SELECT CAST(COUNT(*) AS INTEGER)
-        FROM ${subscriptions}
-        WHERE ${subscriptions.customerId} = ${customers.id}
-        AND ${subscriptions.status} = 'active'
+        FROM "subscriptions"
+        WHERE "subscriptions"."customer_id" = "customers"."id"
+        AND "subscriptions"."status" = 'active'
       )`.as('active_subscription_count'),
 
       totalSubscriptions: sql<number>`(
         SELECT CAST(COUNT(*) AS INTEGER)
-        FROM ${subscriptions}
-        WHERE ${subscriptions.customerId} = ${customers.id}
+        FROM "subscriptions"
+        WHERE "subscriptions"."customer_id" = "customers"."id"
       )`.as('total_subscriptions'),
 
       completedJobs: sql<number>`(
-        SELECT CAST(COUNT(DISTINCT ${jobs.id}) AS INTEGER)
-        FROM ${jobs}
-        INNER JOIN ${properties} ON ${jobs.propertyId} = ${properties.id}
-        WHERE ${properties.customerId} = ${customers.id}
-        AND ${jobs.status} = 'completed'
+        SELECT CAST(COUNT(DISTINCT "jobs"."id") AS INTEGER)
+        FROM "jobs"
+        INNER JOIN "properties" ON "jobs"."property_id" = "properties"."id"
+        WHERE "properties"."customer_id" = "customers"."id"
+        AND "jobs"."status" = 'completed'
       )`.as('completed_jobs'),
     })
     .from(customers)

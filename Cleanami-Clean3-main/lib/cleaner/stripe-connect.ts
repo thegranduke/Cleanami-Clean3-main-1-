@@ -2,17 +2,10 @@ import "server-only";
 
 import { db } from "@/db";
 import { cleaners } from "@/db/schemas";
+import { getStripeRedirectBaseUrl } from "@/lib/app-url";
 import { applyStripeAccountState } from "@/lib/cleaner/stripe-account-state";
 import { stripe } from "@/lib/stripe/config";
 import { eq } from "drizzle-orm";
-
-function getAppBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_SERVER_URL ??
-    "http://localhost:3000"
-  );
-}
 
 export async function createStripeOnboardingLink(cleanerId: string) {
   const cleaner = await db.query.cleaners.findFirst({
@@ -43,7 +36,7 @@ export async function createStripeOnboardingLink(cleanerId: string) {
       .where(eq(cleaners.id, cleanerId));
   }
 
-  const baseUrl = getAppBaseUrl();
+  const baseUrl = getStripeRedirectBaseUrl();
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${baseUrl}/cleaner/onboarding?stripe=refresh`,

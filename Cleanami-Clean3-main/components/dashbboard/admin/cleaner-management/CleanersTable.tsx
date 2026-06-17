@@ -1,9 +1,13 @@
-'use client'
+'use client';
 
+import { useState } from 'react';
 import { ChevronDownIcon, ChevronsUpDown, ChevronUpIcon, UserIcon } from "lucide-react";
-import { CleanersResponse } from "@/lib/queries/cleaners"; 
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { CleanersResponse } from "@/lib/queries/cleaners";
 import { formatContactValue } from "@/components/dashbboard/admin/ui/formatContact";
 import { formatDate } from "date-fns";
+import { cn } from "@/lib/utils";
 
 type Cleaner = CleanersResponse['data'][number];
 
@@ -20,6 +24,14 @@ const getStatusBadge = (status: string | null | undefined) => {
   }
 };
 
+function assignmentEligibilityLabel(cleaner: Cleaner): string {
+  if (!cleaner.eligibleForAssignments) return 'Off';
+  if (cleaner.onboardingCompleted && cleaner.stripePayoutsEnabled) {
+    return 'On (ready)';
+  }
+  return 'On (override)';
+}
+
 export type SortDirection = 'ascending' | 'descending';
 export type SortableKey = 'fullName' | 'email' | 'phone' | 'accountStatus' | 'createdAt';
 
@@ -33,6 +45,66 @@ interface CleanersTableProps {
   sortConfig: SortConfig | null;
   onSort: (key: SortableKey) => void;
   onManageCleaner: (cleaner: Cleaner) => void;
+}
+
+function AssignmentEligibilityToggle({
+  cleaner,
+}: {
+  cleaner: Cleaner;
+}) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const enabled = cleaner.eligibleForAssignments === true;
+
+  async function handleToggle() {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/cleaners/${cleaner.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eligibleForAssignments: !enabled }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update eligibility');
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['cleaners'] });
+      toast.success(
+        !enabled
+          ? `${cleaner.fullName} can now receive job assignments`
+          : `${cleaner.fullName} removed from job assignments`
+      );
+    } catch {
+      toast.error('Could not update assignment eligibility');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        disabled={saving}
+        onClick={handleToggle}
+        className={cn(
+          'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
+          enabled ? 'bg-teal-600' : 'bg-gray-300'
+        )}
+      >
+        <span
+          className={cn(
+            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+            enabled ? 'translate-x-6' : 'translate-x-1'
+          )}
+        />
+      </button>
+      <span className="text-xs text-gray-500">{assignmentEligibilityLabel(cleaner)}</span>
+    </div>
+  );
 }
 
 export const CleanersTable = ({ cleaners, sortConfig, onSort }: CleanersTableProps) => {
@@ -76,6 +148,9 @@ export const CleanersTable = ({ cleaners, sortConfig, onSort }: CleanersTablePro
                 </th>
               ))}
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Job assignments
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Onboarding
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -118,6 +193,9 @@ export const CleanersTable = ({ cleaners, sortConfig, onSort }: CleanersTablePro
                 </td>
                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {formatDate(cleaner.createdAt, 'yyyy-MM-dd')}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <AssignmentEligibilityToggle cleaner={cleaner} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                   {cleaner.onboardingCompleted ? 'Complete' : cleaner.onboardingStarted ? 'In progress' : 'Not started'}

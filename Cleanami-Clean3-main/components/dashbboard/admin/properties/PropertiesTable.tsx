@@ -2,6 +2,7 @@ import { TrashIcon } from "lucide-react";
 import Link from "next/link";
 import { PropertiesWithOwner } from "@/lib/queries/properties";
 import { formatContactValue } from "@/components/dashbboard/admin/ui/formatContact";
+import { ClientTime } from "@/components/dashbboard/admin/ui/ClientTime";
 
 interface PropertiesTableProps {
   properties: PropertiesWithOwner['data'];
@@ -61,8 +62,13 @@ export const PropertiesTable = ({
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                  {/* Placeholder for next clean */}
-                  Oct 10, 2025
+                  {property.nextJob?.checkInTime ? (
+                    <ClientTime
+                      dateString={new Date(property.nextJob.checkInTime)}
+                    />
+                  ) : (
+                    <span className="text-gray-400">None scheduled</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex items-center justify-end space-x-4">

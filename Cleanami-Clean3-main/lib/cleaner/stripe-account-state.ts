@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/db";
 import { cleaners } from "@/db/schemas";
 import { logCleanerAuditEvent } from "@/lib/queries/cleaner-invitations";
+import { syncEligibleForAssignments } from "@/lib/cleaner/eligibility";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 
@@ -76,4 +77,6 @@ export async function applyStripeAccountState(
       metadata: {},
     });
   }
+
+  await syncEligibleForAssignments(cleanerId);
 }

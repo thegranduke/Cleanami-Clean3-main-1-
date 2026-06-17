@@ -40,29 +40,34 @@ export async function getCleanerAuth(): Promise<CleanerAuthResult> {
     return { cleanerId: null, error: SERVICE_UNAVAILABLE.database };
   }
 
-  const dbUser = await database.query.users.findFirst({
-    where: eq(users.supabaseUserId, claims.sub),
-    columns: { id: true },
-  });
+  try {
+    const dbUser = await database.query.users.findFirst({
+      where: eq(users.supabaseUserId, claims.sub),
+      columns: { id: true },
+    });
 
-  if (!dbUser) {
-    return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
+    if (!dbUser) {
+      return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
+    }
+
+    const cleaner = await database.query.cleaners.findFirst({
+      where: eq(cleaners.userId, dbUser.id),
+      columns: { id: true, invitationId: true },
+    });
+
+    if (!cleaner) {
+      return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
+    }
+
+    if (!cleaner.invitationId) {
+      return { cleanerId: null, error: INVITATION_REQUIRED_MESSAGE };
+    }
+
+    return { cleanerId: cleaner.id, error: null };
+  } catch (error) {
+    console.error("[getCleanerAuth] database error", error);
+    return { cleanerId: null, error: SERVICE_UNAVAILABLE.database };
   }
-
-  const cleaner = await database.query.cleaners.findFirst({
-    where: eq(cleaners.userId, dbUser.id),
-    columns: { id: true, invitationId: true },
-  });
-
-  if (!cleaner) {
-    return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
-  }
-
-  if (!cleaner.invitationId) {
-    return { cleanerId: null, error: INVITATION_REQUIRED_MESSAGE };
-  }
-
-  return { cleanerId: cleaner.id, error: null };
 }
 
 export async function requireCleanerJobAssignment(

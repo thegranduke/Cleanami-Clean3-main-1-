@@ -25,9 +25,10 @@ export function getDbOrNull(): DrizzleDb | null {
   client = postgres(process.env.DATABASE_URL!, {
     // Required for Supabase pooler / serverless (Netlify, Vercel).
     prepare: false,
-    max: 1,
+    max: process.env.NODE_ENV === "production" ? 3 : 5,
     idle_timeout: 20,
     connect_timeout: 15,
+    max_lifetime: 60 * 30,
   });
   database = drizzle({ client, schema });
   return database;

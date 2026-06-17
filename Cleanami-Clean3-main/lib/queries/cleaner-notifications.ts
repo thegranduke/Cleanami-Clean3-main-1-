@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/db";
 import { cleaners, notifications, users } from "@/db/schemas";
+import { getClaimableUrgentJobIds } from "@/lib/services/urgent-replacement.service";
 import { and, desc, eq, or } from "drizzle-orm";
 
 export type CleanerNotification = {
@@ -37,10 +38,23 @@ export async function getCleanerNotifications(
     limit,
   });
 
-  const unreadCount = rows.filter((n) => !n.isRead).length;
+  const swapJobIds = rows
+    .filter((n) => n.type === "swap_available" && n.jobId)
+    .map((n) => n.jobId as string);
+
+  const claimableJobIds = await getClaimableUrgentJobIds(swapJobIds);
+
+  const visibleRows = rows.filter((n) => {
+    if (n.type === "swap_available" && n.jobId) {
+      return claimableJobIds.has(n.jobId);
+    }
+    return true;
+  });
+
+  const unreadCount = visibleRows.filter((n) => !n.isRead).length;
 
   return {
-    notifications: rows.map((n) => ({
+    notifications: visibleRows.map((n) => ({
       id: n.id,
       type: n.type,
       title: n.title,
@@ -100,6 +114,34 @@ export async function notifyAdminsOfDispute(
       title: "New cleaner dispute",
       message: `${cleanerName} submitted a ${disputeType.replace("_", " ")} dispute.`,
       metadata: { source: "cleaner_dispute" },
+    }))
+  );
+}
+
+export async function notifyAdminsOfJobAlert(input: {
+  title: string;
+  message: string;
+  jobId: string;
+  outcome: string;
+}) {
+  const admins = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(or(eq(users.role, "admin"), eq(users.role, "super_admin")));
+
+  if (admins.length === 0) return;
+
+  await db.insert(notifications).values(
+    admins.map((admin) => ({
+      userId: admin.id,
+      type: "completion_reminder" as const,
+      title: input.title,
+      message: input.message,
+      jobId: input.jobId,
+      metadata: {
+        source: "job_reconciliation",
+        outcome: input.outcome,
+      },
     }))
   );
 }

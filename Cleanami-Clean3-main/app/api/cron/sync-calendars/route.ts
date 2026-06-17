@@ -158,6 +158,17 @@ if (supabaseUrl && supabaseAnonKey) {
   } catch (assignmentError) {
     console.error("Job assignment error:", assignmentError);
   }
+
+  console.log("=== JOB RECONCILIATION (stale active jobs) ===");
+  try {
+    const { reconcileStaleJobs } = await import(
+      "@/lib/services/job-reconciliation.service"
+    );
+    const reconciliation = await reconcileStaleJobs();
+    console.log("✓ Job reconciliation:", reconciliation);
+  } catch (reconcileError) {
+    console.error("Job reconciliation error:", reconcileError);
+  }
 }
 
     return new Response(

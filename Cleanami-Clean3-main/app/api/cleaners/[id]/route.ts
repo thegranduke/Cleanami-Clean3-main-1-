@@ -19,13 +19,34 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const body = await req.json();
+  const body = (await req.json()) as {
+    address?: string;
+    eligibleForAssignments?: boolean;
+  };
 
-  await db.update(cleaners).set(body).where(eq(cleaners.id, id));
+  if (typeof body.eligibleForAssignments === "boolean") {
+    await db
+      .update(cleaners)
+      .set({
+        eligibleForAssignments: body.eligibleForAssignments,
+        updatedAt: new Date(),
+      })
+      .where(eq(cleaners.id, id));
 
-  if (body.address) {
-    await updateCleanerCoordinates(id);
+    return NextResponse.json({
+      success: true,
+      eligibleForAssignments: body.eligibleForAssignments,
+    });
   }
 
-  return NextResponse.json({ success: true });
+  if (body.address) {
+    await db
+      .update(cleaners)
+      .set({ address: body.address, updatedAt: new Date() })
+      .where(eq(cleaners.id, id));
+    await updateCleanerCoordinates(id);
+    return NextResponse.json({ success: true });
+  }
+
+  return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
 }

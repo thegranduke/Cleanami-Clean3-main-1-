@@ -49,6 +49,7 @@ export async function getAvailableCleanersForProperty(
       stripePayoutsEnabled: true,
       stripeChargesEnabled: true,
       stripeOnboardingComplete: true,
+      eligibleForAssignments: true,
       legalDocsSigned: true,
     },
   });

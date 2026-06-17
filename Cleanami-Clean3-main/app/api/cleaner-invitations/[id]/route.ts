@@ -34,12 +34,23 @@ export async function PATCH(
   const body = (await request.json()) as { action?: "disable" | "enable" | "remove" };
 
   if (body.action === "remove") {
-    await db.delete(cleanerInvitations).where(eq(cleanerInvitations.id, id));
+    const invitation = await db.query.cleanerInvitations.findFirst({
+      where: eq(cleanerInvitations.id, id),
+      columns: { id: true, email: true },
+    });
+
+    if (!invitation) {
+      return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
+    }
+
     await logCleanerAuditEvent({
       action: "invitation_removed",
       invitationId: id,
       actorUserId: userId ?? undefined,
+      metadata: { email: invitation.email },
     });
+
+    await db.delete(cleanerInvitations).where(eq(cleanerInvitations.id, id));
     return NextResponse.json({ success: true });
   }
 

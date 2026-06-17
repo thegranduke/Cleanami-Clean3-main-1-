@@ -55,7 +55,7 @@ export function JobCard({ job }: JobCardProps) {
       }
       const names =
         data.eligibleCleanerNames?.length > 0
-          ? ` Notified: ${data.eligibleCleanerNames.join(", ")}.`
+          ? ` ${data.eligibleCleanerNames.length} cleaner(s) could cover this swap if approved.`
           : "";
       setSwapMessage(`${data.message}${names}`);
     } catch (err) {

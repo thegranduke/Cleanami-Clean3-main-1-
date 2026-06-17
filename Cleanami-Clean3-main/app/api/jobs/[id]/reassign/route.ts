@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { jobs, jobsToCleaners } from "@/db/schemas";
+import { jobs, jobsToCleaners, swapRequests } from "@/db/schemas";
+import { hasOpenUrgentSwap, dismissUrgentSwapNotifications } from "@/lib/services/urgent-replacement.service";
 import { eq, and } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,30 +29,44 @@ export async function POST(
       );
     }
 
-    // Remove existing primary cleaner
+    const isUrgent = await hasOpenUrgentSwap(id);
+    const now = new Date();
+
     await db
       .delete(jobsToCleaners)
       .where(
         and(eq(jobsToCleaners.jobId, id), eq(jobsToCleaners.role, "primary"))
       );
 
-    // Assign new cleaner
     await db.insert(jobsToCleaners).values({
       jobId: id,
       cleanerId,
       role,
+      urgentBonus: isUrgent,
     });
 
-    // Update job status
     await db
       .update(jobs)
       .set({
         status: "assigned",
-        updatedAt: new Date(),
+        updatedAt: now,
       })
       .where(eq(jobs.id, id));
 
-    return NextResponse.json({ success: true });
+    if (isUrgent) {
+      await db
+        .update(swapRequests)
+        .set({
+          status: "accepted",
+          replacementCleanerId: cleanerId,
+          updatedAt: now,
+        })
+        .where(and(eq(swapRequests.jobId, id), eq(swapRequests.status, "urgent")));
+
+      await dismissUrgentSwapNotifications(id);
+    }
+
+    return NextResponse.json({ success: true, urgentBonus: isUrgent });
   } catch (error) {
     console.error("Error reassigning cleaner:", error);
     return NextResponse.json(

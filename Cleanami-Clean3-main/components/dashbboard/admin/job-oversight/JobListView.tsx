@@ -252,6 +252,11 @@ import Link from "next/link";
 import { Route } from "next";
 import { getStatusBadge } from "../../utils";
 import { SearchBar } from "../ui/SearchBar";
+import {
+  DASHBOARD_FUTURE_DAYS,
+  DASHBOARD_PAST_DAYS,
+  getDashboardJobDateRange,
+} from "@/lib/queries/dashboard-job-window";
 
 interface AssignedCleaner {
   id: string;
@@ -283,7 +288,14 @@ type FetchJobsContext = {
 async function fetchJobs(context: FetchJobsContext) {
   const { pageParam = 1, queryKey } = context;
   const { status, query } = queryKey[1] as { status: JobStatus; query: string };
-  const params = new URLSearchParams({ page: String(pageParam), limit: "15" });
+  const { startDate, endDate } = getDashboardJobDateRange();
+  const params = new URLSearchParams({
+    page: String(pageParam),
+    limit: "15",
+    dashboard: "1",
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  });
 
   if (status !== "all") {
     params.append("status", status);
@@ -330,14 +342,24 @@ export const JobListView = () => {
     };
   }, [queryClient]);
 
-  const jobs = useMemo(() => data?.pages.flatMap((page) => page.data) ?? [], [data]);
+  const jobs = useMemo(() => {
+    const merged = data?.pages.flatMap((page) => page.data) ?? [];
+    return [...merged].sort((a, b) => {
+      const ta = a.checkInTime ? new Date(a.checkInTime).getTime() : Number.MAX_SAFE_INTEGER;
+      const tb = b.checkInTime ? new Date(b.checkInTime).getTime() : Number.MAX_SAFE_INTEGER;
+      return ta - tb;
+    });
+  }, [data]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-gray-900">Job List</h2>
-          <p className="text-sm text-gray-500">Search and filter jobs for cleaner assignment, check-in, and admin review.</p>
+          <p className="text-sm text-gray-500">
+            Check-in order · last {DASHBOARD_PAST_DAYS} days through{" "}
+            {DASHBOARD_FUTURE_DAYS} days ahead
+          </p>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

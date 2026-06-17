@@ -7,6 +7,7 @@ import {
   syncStripeOnboardingStatus,
 } from "@/lib/cleaner/stripe-connect";
 import { logCleanerAuditEvent } from "@/lib/queries/cleaner-invitations";
+import { syncEligibleForAssignments } from "@/lib/cleaner/eligibility";
 import { eq } from "drizzle-orm";
 
 export async function getCleanerOnboardingState(cleanerId: string) {
@@ -89,6 +90,7 @@ export async function saveCleanerOnboardingStep(
       cleanerId,
       metadata: {},
     });
+    await syncEligibleForAssignments(cleanerId);
   }
 
   return updated;

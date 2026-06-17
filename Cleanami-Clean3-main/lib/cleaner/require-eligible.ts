@@ -13,8 +13,7 @@ export async function requireCleanerAssignmentEligible(cleanerId: string): Promi
     where: eq(cleaners.id, cleanerId),
     columns: {
       id: true,
-      onboardingCompleted: true,
-      stripePayoutsEnabled: true,
+      eligibleForAssignments: true,
     },
   });
 
@@ -26,7 +25,7 @@ export async function requireCleanerAssignmentEligible(cleanerId: string): Promi
     return {
       eligible: false,
       error:
-        "Complete onboarding and Stripe Connect setup before using this feature.",
+        "You are not eligible for job assignments yet. Contact CleanNami support or finish onboarding.",
     };
   }
 

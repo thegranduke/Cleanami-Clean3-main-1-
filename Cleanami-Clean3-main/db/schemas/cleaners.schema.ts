@@ -48,6 +48,8 @@ export const cleaners = pgTable("cleaners", {
     contractorAgreementUrl?: string | null;
   }>().default({ w9Url: null, liabilityWaiverUrl: null, gpsConsentUrl: null }),
   onboardingStep: integer("onboarding_step").default(1),
+  /** Admin-controlled + auto-enabled when onboarding + Stripe payouts are complete */
+  eligibleForAssignments: boolean("eligible_for_assignments").default(false).notNull(),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

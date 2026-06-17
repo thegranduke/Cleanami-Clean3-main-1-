@@ -1,11 +1,70 @@
 import "server-only";
 
-import type { cleaners } from "@/db/schemas";
+import { db } from "@/db";
+import { cleaners } from "@/db/schemas";
+import { eq } from "drizzle-orm";
 
 export type CleanerEligibilityRecord = Pick<
   typeof cleaners.$inferSelect,
-  "onboardingCompleted" | "stripePayoutsEnabled"
+  "eligibleForAssignments"
 >;
+
+export function meetsAssignmentRequirements(
+  cleaner: {
+    onboardingCompleted?: boolean | null;
+    stripePayoutsEnabled?: boolean | null;
+  } | null | undefined
+): boolean {
+  if (!cleaner) return false;
+  return (
+    cleaner.onboardingCompleted === true &&
+    cleaner.stripePayoutsEnabled === true
+  );
+}
+
+/** Cleaner may receive assignments, payouts, and on-call pool inclusion. */
+export function isCleanerAssignmentEligible(
+  cleaner: CleanerEligibilityRecord | null | undefined
+): boolean {
+  if (!cleaner) return false;
+  return cleaner.eligibleForAssignments === true;
+}
+
+export async function syncEligibleForAssignments(
+  cleanerId: string
+): Promise<void> {
+  const cleaner = await db.query.cleaners.findFirst({
+    where: eq(cleaners.id, cleanerId),
+    columns: {
+      onboardingCompleted: true,
+      stripePayoutsEnabled: true,
+      eligibleForAssignments: true,
+    },
+  });
+
+  if (!cleaner || cleaner.eligibleForAssignments) return;
+
+  if (meetsAssignmentRequirements(cleaner)) {
+    await db
+      .update(cleaners)
+      .set({ eligibleForAssignments: true, updatedAt: new Date() })
+      .where(eq(cleaners.id, cleanerId));
+  }
+}
+
+export function getAssignmentEligibilityLabel(cleaner: {
+  eligibleForAssignments: boolean | null;
+  onboardingCompleted: boolean | null;
+  stripePayoutsEnabled: boolean | null;
+}): string {
+  if (!cleaner.eligibleForAssignments) {
+    return "Not eligible";
+  }
+  if (meetsAssignmentRequirements(cleaner)) {
+    return "Eligible (requirements met)";
+  }
+  return "Eligible (admin override)";
+}
 
 export function hasRequiredLegalDocs(
   legalDocsSigned: typeof cleaners.$inferSelect.legalDocsSigned
@@ -17,16 +76,6 @@ export function hasRequiredLegalDocs(
       legalDocsSigned.gpsConsentUrl &&
       legalDocsSigned.contractorAgreementUrl
   );
-}
-
-/** Cleaner may receive assignments, payouts, and on-call pool inclusion. */
-export function isCleanerAssignmentEligible(
-  cleaner: CleanerEligibilityRecord | null | undefined
-): boolean {
-  if (!cleaner) return false;
-  if (!cleaner.onboardingCompleted) return false;
-  if (!cleaner.stripePayoutsEnabled) return false;
-  return true;
 }
 
 export function isCleanerPortalUnlocked(

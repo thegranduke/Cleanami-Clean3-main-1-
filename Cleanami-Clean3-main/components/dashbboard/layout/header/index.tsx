@@ -1,8 +1,9 @@
 'use client'
 
 import { SignOutButton } from "@/components/SignOutButton";
+import { AdminNotificationsBell } from "@/components/dashbboard/layout/header/AdminNotificationsBell";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { BellIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -35,10 +36,7 @@ export const Header = () => {
         <h2 className="text-xl font-semibold text-gray-800 transition-all duration-300 hidden md:block">{prettifyPath(activePage)}</h2>
       </div>
       <div className="flex items-center space-x-6">
-        <button className="text-gray-500 hover:text-gray-700 relative">
-          <BellIcon />
-          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500"></span>
-        </button>
+        <AdminNotificationsBell />
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}

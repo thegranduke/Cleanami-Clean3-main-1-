@@ -5,6 +5,7 @@ import { Loader } from "lucide-react";
 import { toast } from "sonner";
 import { JobCard } from "@/components/cleaner/JobCard";
 import { CleanerPageMessage } from "@/components/cleaner/CleanerPageMessage";
+import { UrgentJobsSection } from "@/components/cleaner/UrgentJobsSection";
 import type { CleanerJobSummary } from "@/lib/queries/cleaner-jobs";
 import { parseCleanerApiError } from "@/lib/cleaner/parse-api-error";
 import { isServiceUnavailableMessage } from "@/lib/env/messages";
@@ -67,16 +68,20 @@ export function JobsPageClient() {
 
   if (jobs.length === 0) {
     return (
-      <CleanerPageMessage
-        title="No upcoming jobs"
-        message="You don't have any assigned cleans in the next two weeks. Update your availability or check back after new assignments."
-        variant="empty"
-      />
+      <div className="space-y-4">
+        <UrgentJobsSection />
+        <CleanerPageMessage
+          title="No upcoming jobs"
+          message="You don't have any assigned cleans in the next two weeks. Update your availability or check back after new assignments."
+          variant="empty"
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <UrgentJobsSection />
       {jobs.map((job) => (
         <JobCard key={job.jobId} job={job} />
       ))}

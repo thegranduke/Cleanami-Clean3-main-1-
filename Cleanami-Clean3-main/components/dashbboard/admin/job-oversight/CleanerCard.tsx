@@ -1,6 +1,8 @@
 'use client';
 
+import { toast } from 'sonner';
 import type { JobDetails } from '@/lib/queries/jobs';
+import type { AdminConfirmAction } from './AdminActionsCard';
 
 export function CleanerCard({
   job,
@@ -12,46 +14,42 @@ export function CleanerCard({
   job: JobDetails;
   primaryCleaner?: JobDetails['cleaners'][0]['cleaner'];
   allCleaners: JobDetails['cleaners'];
-  onAction: (action: { title: string; message: string; onConfirm: () => void }) => void;
+  onAction: (action: AdminConfirmAction) => void;
   readOnly?: boolean;
 }) {
-  const handleCheckIn = async () => {
-  onAction({
-    title: 'Manual Check-In',
-    message: `Check in ${primaryCleaner?.fullName} for this job?`,
-    onConfirm: async () => {
-      try {
+  const handleCheckIn = () => {
+    onAction({
+      title: 'Manual Check-In',
+      message: `Check in ${primaryCleaner?.fullName} for this job?`,
+      loadingText: 'Checking in…',
+      confirmButtonText: 'Check in',
+      confirmButtonClassName: 'bg-blue-600 hover:bg-blue-500',
+      onConfirm: async () => {
         const response = await fetch(`/api/jobs/${job.id}/check-in`, {
           method: 'POST',
         });
         if (!response.ok) throw new Error('Failed to check in');
-        // Optimistic update will be handled by real-time subscription
-      } catch (error) {
-        console.error('Check-in error:', error);
-        alert('Failed to check in cleaner');
-      }
-    },
-  });
-};
+        toast.success('Cleaner checked in');
+      },
+    });
+  };
 
-const handleCheckOut = async () => {
-  onAction({
-    title: 'Manual Check-Out',
-    message: `Check out ${primaryCleaner?.fullName} from this job?`,
-    onConfirm: async () => {
-      try {
+  const handleCheckOut = () => {
+    onAction({
+      title: 'Manual Check-Out',
+      message: `Check out ${primaryCleaner?.fullName} from this job?`,
+      loadingText: 'Checking out…',
+      confirmButtonText: 'Check out',
+      confirmButtonClassName: 'bg-gray-600 hover:bg-gray-500',
+      onConfirm: async () => {
         const response = await fetch(`/api/jobs/${job.id}/check-out`, {
           method: 'POST',
         });
         if (!response.ok) throw new Error('Failed to check out');
-        // Optimistic update will be handled by real-time subscription
-      } catch (error) {
-        console.error('Check-out error:', error);
-        alert('Failed to check out cleaner');
-      }
-    },
-  });
-};
+        toast.success('Cleaner checked out');
+      },
+    });
+  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">

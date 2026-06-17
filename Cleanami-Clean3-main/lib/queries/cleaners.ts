@@ -49,6 +49,7 @@ export async function getCleaners({
       stripeChargesEnabled: cleaners.stripeChargesEnabled,
       stripePayoutsEnabled: cleaners.stripePayoutsEnabled,
       stripeAccountId: cleaners.stripeAccountId,
+      eligibleForAssignments: cleaners.eligibleForAssignments,
       activatedAt: cleaners.activatedAt,
       createdAt: cleaners.createdAt,
       

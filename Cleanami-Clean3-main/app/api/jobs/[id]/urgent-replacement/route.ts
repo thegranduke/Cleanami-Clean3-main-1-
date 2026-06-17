@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { jobs, jobsToCleaners } from "@/db/schemas";
-import { eq } from "drizzle-orm";
+import { triggerUrgentReplacement } from "@/lib/services/urgent-replacement.service";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -17,27 +15,17 @@ export async function POST(
     if (userRole !== "admin" && userRole !== "super_admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
     const { id } = await params;
+    const result = await triggerUrgentReplacement(id);
 
-    await db.delete(jobsToCleaners).where(eq(jobsToCleaners.jobId, id));
-
-    await db
-      .update(jobs)
-      .set({
-        status: "unassigned",
-        // isUrgentBonus: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(jobs.id, id));
-
-    // TODO: Trigger notification to available cleaners
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Error triggering urgent replacement:", error);
-    return NextResponse.json(
-      { error: "Failed to trigger urgent replacement" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to trigger urgent replacement";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -7,23 +7,15 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@/db";
 import { users } from "@/db/schemas";
 import { formatError } from "@/lib/utils";
+import { resolvePostAuthPath } from "@/lib/auth-redirects";
 import { AuthService } from "@/lib/services/auth/auth.service";
 import { AuthUserForm } from "@/lib/types/auth";
 import { eq } from "drizzle-orm";
 
 function redirectForRole(role: string | undefined) {
-  if (role === "cleaner") {
-    revalidatePath("/cleaner/onboarding");
-    return redirect("/cleaner/onboarding");
-  }
-
-  if (role === "admin" || role === "super_admin") {
-    revalidatePath("/admin/dashboard");
-    return redirect("/admin/dashboard");
-  }
-
-  revalidatePath("/customer/dashboard");
-  return redirect("/customer/dashboard");
+  const destination = resolvePostAuthPath(role);
+  revalidatePath(destination);
+  return redirect(destination);
 }
 
 export async function signOut() {

@@ -11,7 +11,7 @@ import { JobHistorySection } from './JobHistorySeciont';
 import { PropertyDetailsCard } from './PropertyDetailsCard';
 import { CleanerCard } from './CleanerCard';
 import { IssuesCard } from './IssuesCard';
-import { AdminActionsCard } from './AdminActionsCard';
+import { AdminActionsCard, type AdminConfirmAction } from './AdminActionsCard';
 import { EvidenceReviewModal } from './modals/EvidenceReviewModal';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { useRealtimeCleanerCard } from '@/hooks/useRealtimeCleanerCard';
@@ -37,11 +37,7 @@ export function JobDetailsClient({ jobId }: { jobId: string }) {
 
   // Modal states
   const [reviewPhotoIndex, setReviewPhotoIndex] = useState<number | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<AdminConfirmAction | null>(null);
 
   // Real-time subscription (admin only — uses direct Supabase client)
   useEffect(() => {
@@ -151,13 +147,14 @@ export function JobDetailsClient({ jobId }: { jobId: string }) {
         <ConfirmationModal
           isOpen={true}
           title={confirmAction.title}
-          // message={confirmAction.message}
-          onConfirm={() => {
-            confirmAction.onConfirm();
-            setConfirmAction(null);
-          }}
+          confirmButtonText={confirmAction.confirmButtonText}
+          confirmButtonClassName={confirmAction.confirmButtonClassName}
+          loadingText={confirmAction.loadingText}
+          onConfirm={confirmAction.onConfirm}
           onClose={() => setConfirmAction(null)}
-        >{confirmAction.message}</ConfirmationModal>
+        >
+          {confirmAction.message}
+        </ConfirmationModal>
       )}
     </>
   );

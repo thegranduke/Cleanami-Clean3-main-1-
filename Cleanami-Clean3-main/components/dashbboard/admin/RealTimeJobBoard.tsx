@@ -127,12 +127,23 @@ export const RealTimeJobBoard = () => {
     };
   }, [queryClient, isAdmin, jobsQueryKey, statsQueryKey]);
 
-  const allJobs = data?.pages.flatMap((page) => page.jobs) ?? [];
-  const uniqueJobs = Array.from(
-    new Map(
-      allJobs.filter((job) => job != null).map((job) => [job.id, job])
-    ).values()
-  );
+  const uniqueJobs = useMemo(() => {
+    const allJobs = data?.pages.flatMap((page) => page.jobs) ?? [];
+    const deduped = Array.from(
+      new Map(
+        allJobs.filter((job) => job != null).map((job) => [job.id, job])
+      ).values()
+    );
+    return deduped.sort((a, b) => {
+      const ta = a.checkInTime
+        ? new Date(a.checkInTime).getTime()
+        : Number.MAX_SAFE_INTEGER;
+      const tb = b.checkInTime
+        ? new Date(b.checkInTime).getTime()
+        : Number.MAX_SAFE_INTEGER;
+      return ta - tb;
+    });
+  }, [data]);
 
   if (userLoading) {
     return (
@@ -169,7 +180,10 @@ export const RealTimeJobBoard = () => {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {stats && (
           <>
-            <KpiCard title="Total Jobs" value={stats.totalJobs.toString()} />
+            <KpiCard
+              title="Scheduled jobs"
+              value={stats.totalInScheduleWindow.toString()}
+            />
             <KpiCard title="Active Jobs" value={stats.totalActive.toString()} />
             <KpiCard
               title="Today's check-in schedule"

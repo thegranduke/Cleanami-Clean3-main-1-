@@ -78,7 +78,7 @@ export async function getPropertiesWithOwner({
         )
         FROM ${jobs}
         WHERE ${jobs.propertyId} = ${properties.id}
-        AND ${jobs.status} IN ('unassigned', 'assigned')
+        AND ${jobs.status} NOT IN ('completed', 'canceled')
         AND ${jobs.checkInTime} > NOW()
         ORDER BY ${jobs.checkInTime} ASC
         LIMIT 1
@@ -163,9 +163,16 @@ export async function getPropertyDetails(propertyId: string) {
 
   const now = new Date();
   const upcomingJobs = allJobs
-    .filter((j) => j.checkInTime && new Date(j.checkInTime) > now)
-    .sort((a, b) => 
-      new Date(a.checkInTime!).getTime() - new Date(b.checkInTime!).getTime()
+    .filter(
+      (j) =>
+        j.checkInTime &&
+        new Date(j.checkInTime) > now &&
+        j.status !== "completed" &&
+        j.status !== "canceled"
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.checkInTime!).getTime() - new Date(b.checkInTime!).getTime()
     );
 
   return {

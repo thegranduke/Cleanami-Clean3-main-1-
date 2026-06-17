@@ -1,25 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import type { JobDetails } from '@/lib/queries/jobs';
 import type { GetAvailableCleanersForJobResponse } from '@/app/api/jobs/[id]/available-cleaners/route';
 
-// type AvailableCleaner = {
-//   id: string;
-//   fullName: string;
-//   reliabilityScore: string | null;
-//   onCallStatus: string;
-//   distance: number;
-// };
+export type AdminConfirmAction = {
+  title: string;
+  message: string;
+  loadingText?: string;
+  confirmButtonText?: string;
+  confirmButtonClassName?: string;
+  onConfirm: () => void | Promise<void>;
+};
 
 export function AdminActionsCard({
   job,
   onAction,
 }: {
   job: JobDetails;
-  onAction: (action: { title: string; message: string; onConfirm: () => void }) => void;
+  onAction: (action: AdminConfirmAction) => void;
 }) {
+  const queryClient = useQueryClient();
   const [selectedCleanerId, setSelectedCleanerId] = useState('');
   const [newDeadline, setNewDeadline] = useState(
     job.checkInTime ? new Date(job.checkInTime).toISOString().substring(0, 16) : ''
@@ -27,41 +31,54 @@ export function AdminActionsCard({
 
   const isDisabled = job.status === 'canceled' || job.status === 'completed';
 
-  
-  const { data: response , isLoading: loadingCleaners } = useQuery<GetAvailableCleanersForJobResponse>({
-  queryKey: ['available-cleaners', job.id],
-  queryFn: async () => {
-    const res = await fetch(`/api/jobs/${job.id}/available-cleaners`);
-    if (!res.ok) throw new Error('Failed to fetch available cleaners');
-    return res.json();
-  },
-});
-
+  const { data: response, isLoading: loadingCleaners } =
+    useQuery<GetAvailableCleanersForJobResponse>({
+      queryKey: ['available-cleaners', job.id],
+      queryFn: async () => {
+        const res = await fetch(`/api/jobs/${job.id}/available-cleaners`);
+        if (!res.ok) throw new Error('Failed to fetch available cleaners');
+        return res.json();
+      },
+    });
 
   const availableCleaners = response?.cleaners || [];
-  // const radiusMiles = response. || 25;
 
   const handleReassign = () => {
     if (!selectedCleanerId) return;
 
-    const selectedCleaner = availableCleaners.find(c => c.id === selectedCleanerId);
+    const selectedCleaner = availableCleaners.find(
+      (c) => c.id === selectedCleanerId
+    );
 
     onAction({
       title: 'Reassign Cleaner',
       message: `Are you sure you want to reassign this job to ${selectedCleaner?.fullName}?`,
+      loadingText: 'Assigning cleaner…',
+      confirmButtonText: 'Assign',
+      confirmButtonClassName: 'bg-teal-600 hover:bg-teal-500',
       onConfirm: async () => {
-        try {
-          const response = await fetch(`/api/jobs/${job.id}/reassign`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cleanerId: selectedCleanerId, role: 'primary' }),
-          });
-          if (!response.ok) throw new Error('Failed to reassign');
-          setSelectedCleanerId('');
-        } catch (error) {
-          console.error('Reassign error:', error);
-          alert('Failed to reassign cleaner');
+        const response = await fetch(`/api/jobs/${job.id}/reassign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cleanerId: selectedCleanerId, role: 'primary' }),
+        });
+        const data = (await response.json()) as {
+          error?: string;
+          urgentBonus?: boolean;
+        };
+        if (!response.ok) {
+          throw new Error(data.error ?? 'Failed to reassign cleaner');
         }
+        setSelectedCleanerId('');
+        await queryClient.invalidateQueries({ queryKey: ['job-details', job.id] });
+        await queryClient.invalidateQueries({
+          queryKey: ['available-cleaners', job.id],
+        });
+        toast.success(
+          data.urgentBonus
+            ? 'Cleaner reassigned with $10 urgent bonus'
+            : 'Cleaner reassigned'
+        );
       },
     });
   };
@@ -72,18 +89,18 @@ export function AdminActionsCard({
     onAction({
       title: 'Extend Deadline',
       message: `Extend deadline to ${new Date(newDeadline).toLocaleString()}?`,
+      loadingText: 'Updating deadline…',
+      confirmButtonText: 'Update',
+      confirmButtonClassName: 'bg-teal-600 hover:bg-teal-500',
       onConfirm: async () => {
-        try {
-          const response = await fetch(`/api/jobs/${job.id}/extend-deadline`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ newDeadline }),
-          });
-          if (!response.ok) throw new Error('Failed to extend deadline');
-        } catch (error) {
-          console.error('Extend deadline error:', error);
-          alert('Failed to extend deadline');
-        }
+        const response = await fetch(`/api/jobs/${job.id}/extend-deadline`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newDeadline }),
+        });
+        if (!response.ok) throw new Error('Failed to extend deadline');
+        await queryClient.invalidateQueries({ queryKey: ['job-details', job.id] });
+        toast.success('Deadline updated');
       },
     });
   };
@@ -91,16 +108,41 @@ export function AdminActionsCard({
   const handleUrgentReplacement = () => {
     onAction({
       title: 'Trigger Urgent Replacement',
-      message: 'This will unassign the current cleaner and flag the job as urgent. Continue?',
+      message:
+        'This removes the primary cleaner. If a backup is assigned, they are promoted automatically with a $10 bonus. Otherwise nearby on-call cleaners are notified to accept the job. Continue?',
+      loadingText: 'Processing replacement…',
+      confirmButtonText: 'Trigger replacement',
+      confirmButtonClassName: 'bg-orange-600 hover:bg-orange-500',
       onConfirm: async () => {
-        try {
-          const response = await fetch(`/api/jobs/${job.id}/urgent-replacement`, {
-            method: 'POST',
-          });
-          if (!response.ok) throw new Error('Failed to trigger urgent replacement');
-        } catch (error) {
-          console.error('Urgent replacement error:', error);
-          alert('Failed to trigger urgent replacement');
+        const response = await fetch(`/api/jobs/${job.id}/urgent-replacement`, {
+          method: 'POST',
+        });
+        const data = (await response.json()) as {
+          error?: string;
+          outcome?: 'backup_promoted' | 'awaiting_accept';
+          replacementCleanerName?: string;
+          notifiedCount?: number;
+        };
+        if (!response.ok) {
+          const message =
+            data.error ?? 'Failed to trigger urgent replacement';
+          toast.error(message);
+          throw new Error(message);
+        }
+
+        await queryClient.invalidateQueries({ queryKey: ['job-details', job.id] });
+        await queryClient.invalidateQueries({
+          queryKey: ['available-cleaners', job.id],
+        });
+
+        if (data.outcome === 'backup_promoted') {
+          toast.success(
+            `${data.replacementCleanerName ?? 'Backup cleaner'} promoted to primary with $10 urgent bonus.`
+          );
+        } else {
+          toast.success(
+            `Primary removed. ${data.notifiedCount ?? 0} cleaner(s) notified — first to accept gets the job.`
+          );
         }
       },
     });
@@ -109,17 +151,17 @@ export function AdminActionsCard({
   const handleCancelJob = () => {
     onAction({
       title: 'Cancel Job',
-      message: 'Are you sure you want to cancel this job? This action cannot be undone.',
+      message:
+        'Are you sure you want to cancel this job? This action cannot be undone.',
+      loadingText: 'Canceling job…',
+      confirmButtonText: 'Cancel job',
       onConfirm: async () => {
-        try {
-          const response = await fetch(`/api/jobs/${job.id}/cancel`, {
-            method: 'POST',
-          });
-          if (!response.ok) throw new Error('Failed to cancel job');
-        } catch (error) {
-          console.error('Cancel job error:', error);
-          alert('Failed to cancel job');
-        }
+        const response = await fetch(`/api/jobs/${job.id}/cancel`, {
+          method: 'POST',
+        });
+        if (!response.ok) throw new Error('Failed to cancel job');
+        await queryClient.invalidateQueries({ queryKey: ['job-details', job.id] });
+        toast.success('Job canceled');
       },
     });
   };
@@ -127,21 +169,43 @@ export function AdminActionsCard({
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
       <div className="flex items-center mb-4 border-b pb-3">
-        <svg className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <svg
+          className="h-6 w-6 text-gray-500"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+          />
         </svg>
-        <h3 className="ml-3 text-lg font-semibold text-gray-800">Admin Overrides</h3>
+        <h3 className="ml-3 text-lg font-semibold text-gray-800">
+          Admin Overrides
+        </h3>
       </div>
 
       <div className="space-y-4">
-        {/* Reassign Cleaner */}
         <div>
-          <label htmlFor="reassign-cleaner" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="reassign-cleaner"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             Reassign Cleaner
           </label>
           {loadingCleaners ? (
-            <div className="text-sm text-gray-500">Loading cleaners...</div>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading cleaners…
+            </div>
           ) : availableCleaners.length === 0 ? (
             <div className="text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
               No cleaners available in this city
@@ -149,23 +213,24 @@ export function AdminActionsCard({
           ) : (
             <div className="flex rounded-md shadow-sm">
               <select
-  id="reassign-cleaner"
-  value={selectedCleanerId}
-  onChange={(e) => setSelectedCleanerId(e.target.value)}
-  disabled={isDisabled}
-  className="flex-1 focus:ring-teal-500 focus:border-teal-500 block w-full rounded-l-md sm:text-sm border-gray-300 disabled:bg-gray-100"
->
-  <option value="">-- Select Cleaner --</option>
-  {availableCleaners.map((cleaner) => (
-    <option key={cleaner.id} value={cleaner.id}>
-      {cleaner.fullName}
-      {cleaner.reliabilityScore && ` (${cleaner.reliabilityScore}%)`}
-      {` - ${cleaner.distance} mi`}
-      {cleaner.onCallStatus === 'on_job' && ' - On Job'}
-    </option>
-  ))}
-</select>
-              
+                id="reassign-cleaner"
+                value={selectedCleanerId}
+                onChange={(e) => setSelectedCleanerId(e.target.value)}
+                disabled={isDisabled}
+                className="flex-1 focus:ring-teal-500 focus:border-teal-500 block w-full rounded-l-md sm:text-sm border-gray-300 disabled:bg-gray-100"
+              >
+                <option value="">-- Select Cleaner --</option>
+                {availableCleaners.map((cleaner) => (
+                  <option key={cleaner.id} value={cleaner.id}>
+                    {cleaner.fullName}
+                    {cleaner.reliabilityScore &&
+                      ` (${cleaner.reliabilityScore}%)`}
+                    {` - ${cleaner.distance} mi`}
+                    {cleaner.onCallStatus === 'on_job' && ' - On Job'}
+                  </option>
+                ))}
+              </select>
+
               <button
                 onClick={handleReassign}
                 disabled={isDisabled || !selectedCleanerId}
@@ -175,14 +240,13 @@ export function AdminActionsCard({
               </button>
             </div>
           )}
-          {/* <p className="mt-1 text-xs text-gray-500">
-  {availableCleaners.length} cleaner{availableCleaners.length !== 1 ? 's' : ''} within {radiusMiles} miles
-</p> */}
         </div>
 
-        {/* Extend Deadline */}
         <div>
-          <label htmlFor="extend-deadline" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="extend-deadline"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             Extend Deadline
           </label>
           <div className="flex rounded-md shadow-sm">
@@ -204,7 +268,6 @@ export function AdminActionsCard({
           </div>
         </div>
 
-        {/* Urgent Replacement */}
         <button
           onClick={handleUrgentReplacement}
           disabled={isDisabled}
@@ -213,15 +276,24 @@ export function AdminActionsCard({
           Trigger Urgent Replacement
         </button>
 
-        {/* Cancel Job */}
         <div className="pt-2 border-t">
           <button
             onClick={handleCancelJob}
             disabled={isDisabled}
             className="w-full flex items-center justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="h-5 w-5 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
             Cancel Job
           </button>

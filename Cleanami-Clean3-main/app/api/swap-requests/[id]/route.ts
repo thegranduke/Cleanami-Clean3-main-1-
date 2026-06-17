@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/db";
 import { swapRequests } from "@/db/schemas";
+import {
+  approveCleanerSwapRequest,
+  denyCleanerSwapRequest,
+} from "@/lib/queries/cleaner-swap";
 import { eq } from "drizzle-orm";
 
 export async function PATCH(
@@ -27,22 +31,34 @@ export async function PATCH(
 
     const targetRequest = await db.query.swapRequests.findFirst({
       where: eq(swapRequests.id, id),
+      columns: { id: true },
     });
 
     if (!targetRequest) {
       return NextResponse.json({ error: "Swap request not found" }, { status: 404 });
     }
 
-    if (targetRequest.status !== "pending") {
-      return NextResponse.json({ error: "Swap request is no longer pending" }, { status: 409 });
+    if (action === "accept") {
+      const result = await approveCleanerSwapRequest(id);
+      if (!result.success) {
+        return NextResponse.json({ error: result.message }, { status: 409 });
+      }
+      return NextResponse.json({
+        success: true,
+        outcome: result.outcome,
+        replacementCleanerName:
+          result.outcome === "backup_promoted"
+            ? result.replacementCleanerName
+            : undefined,
+        notifiedCount:
+          result.outcome === "awaiting_accept" ? result.notifiedCount : undefined,
+      });
     }
 
-    const newStatus = action === "accept" ? "accepted" : "cancelled";
-
-    await db
-      .update(swapRequests)
-      .set({ status: newStatus, updatedAt: new Date() })
-      .where(eq(swapRequests.id, id));
+    const result = await denyCleanerSwapRequest(id);
+    if (!result.success) {
+      return NextResponse.json({ error: result.message }, { status: 409 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

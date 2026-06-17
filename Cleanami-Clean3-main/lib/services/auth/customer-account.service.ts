@@ -3,20 +3,13 @@ import "server-only";
 import { db } from "@/db";
 import { users } from "@/db/schemas";
 import { sendCustomerPortalEmail } from "@/lib/services/email.service";
+import { getAppBaseUrl } from "@/lib/app-url";
 import { createAdminClient } from "@/lib/supabase/server";
 import { eq } from "drizzle-orm";
 
 export type InviteCustomerPortalResult =
   | { success: true; supabaseUserId: string; emailSent: boolean }
   | { success: false; error: string };
-
-function getAppBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_SERVER_URL ??
-    "http://localhost:3000"
-  );
-}
 
 async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const supabaseAdmin = createAdminClient();
