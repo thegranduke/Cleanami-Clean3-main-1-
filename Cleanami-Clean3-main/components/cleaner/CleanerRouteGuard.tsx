@@ -5,9 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 
 export function CleanerRouteGuard({
   portalUnlocked,
+  stripePayoutsEnabled,
   children,
 }: {
   portalUnlocked: boolean;
+  stripePayoutsEnabled: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -19,10 +21,10 @@ export function CleanerRouteGuard({
       router.replace("/cleaner/onboarding");
       return;
     }
-    if (portalUnlocked && onOnboarding) {
+    if (portalUnlocked && stripePayoutsEnabled && onOnboarding) {
       router.replace("/cleaner/jobs");
     }
-  }, [portalUnlocked, onOnboarding, router]);
+  }, [portalUnlocked, stripePayoutsEnabled, onOnboarding, router]);
 
   if (!portalUnlocked && !onOnboarding) {
     return null;

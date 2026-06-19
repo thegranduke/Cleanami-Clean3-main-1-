@@ -36,7 +36,10 @@ export default async function CleanerLayout({
   const bannerMessage = getCleanerOnboardingBannerMessage(cleaner ?? null);
 
   return (
-    <CleanerRouteGuard portalUnlocked={portalUnlocked}>
+    <CleanerRouteGuard
+      portalUnlocked={portalUnlocked}
+      stripePayoutsEnabled={cleaner?.stripePayoutsEnabled ?? false}
+    >
       <CleanerLayoutShell
         portalUnlocked={portalUnlocked}
         bannerMessage={bannerMessage}

@@ -39,8 +39,8 @@ export async function createStripeOnboardingLink(cleanerId: string) {
   const baseUrl = getStripeRedirectBaseUrl();
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
-    refresh_url: `${baseUrl}/cleaner/onboarding?stripe=refresh`,
-    return_url: `${baseUrl}/cleaner/onboarding?stripe=complete`,
+    refresh_url: `${baseUrl}/auth/stripe-connect-return?status=refresh`,
+    return_url: `${baseUrl}/auth/stripe-connect-return?status=complete`,
     type: "account_onboarding",
   });
 
