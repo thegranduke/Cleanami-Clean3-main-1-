@@ -5,15 +5,21 @@ import {
 } from "@/lib/cleaner-auth";
 import { requireCleanerAssignmentEligible } from "@/lib/cleaner/require-eligible";
 import {
+  assertBootstrapDayAllowed,
+  resolveAvailabilityBootstrapState,
+} from "@/lib/cleaner/availability-bootstrap";
+import {
   formatDateRange,
   getAvailabilityWindow,
   getLateSubmissionMessage,
   getSubmissionClosedMessage,
 } from "@/lib/cleaner/availability-deadline";
 import {
+  countCleanerAvailabilityInPeriod,
   getCleanerAvailability,
   saveCleanerAvailability,
   saveCleanerAvailabilityPreferences,
+  saveCleanerBootstrapAvailability,
   type AvailabilityDayInput,
   type AvailabilityPreferenceInput,
 } from "@/lib/queries/cleaner-availability";
@@ -49,10 +55,22 @@ export async function GET() {
 }
 
 type SaveBody = {
-  mode?: "full" | "preferences";
+  mode?: "full" | "preferences" | "bootstrap";
   days?: AvailabilityDayInput[];
   preferences?: AvailabilityPreferenceInput[];
 };
+
+function validateDayFlags(days: AvailabilityDayInput[]) {
+  for (const day of days) {
+    if (!day.isAvailable && day.onCallEligible) {
+      return "On-call cannot be enabled when not available";
+    }
+    if (!day.isAvailable && day.openPoolEligible) {
+      return "Open Pool cannot be enabled when not available";
+    }
+  }
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   const { cleanerId, error } = await getCleanerAuth();
@@ -75,6 +93,69 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as SaveBody;
     const { period, deadline, displayMode } = getAvailabilityWindow();
+
+    const existingRowCount = await countCleanerAvailabilityInPeriod(
+      cleanerId,
+      period
+    );
+    const bootstrap = resolveAvailabilityBootstrapState({
+      displayMode,
+      period,
+      existingRowCount,
+    });
+
+    if (body.mode === "bootstrap") {
+      const days = body.days;
+
+      if (!days?.length) {
+        return NextResponse.json(
+          { error: "days array is required" },
+          { status: 400 }
+        );
+      }
+
+      if (!bootstrap.canBootstrap) {
+        return NextResponse.json(
+          {
+            error:
+              "Mid-cycle availability setup is not available. You may already have submitted for this block, or the submission window is open.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const allowed = new Set(bootstrap.bootstrapDates);
+      const flagError = validateDayFlags(days);
+      if (flagError) {
+        return NextResponse.json({ error: flagError }, { status: 400 });
+      }
+
+      for (const day of days) {
+        if (!day.isAvailable) {
+          continue;
+        }
+        try {
+          assertBootstrapDayAllowed(day.date, period, allowed);
+        } catch (err) {
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : "Invalid date" },
+            { status: 400 }
+          );
+        }
+      }
+
+      const { period: savedPeriod } = await saveCleanerBootstrapAvailability(
+        cleanerId,
+        days,
+        bootstrap.bootstrapDates
+      );
+
+      return NextResponse.json({
+        success: true,
+        mode: "bootstrap",
+        message: `Availability saved for ${formatDateRange(savedPeriod.start, savedPeriod.end)} (remaining days this cycle)`,
+      });
+    }
 
     if (body.mode === "preferences") {
       const preferences = body.preferences;
@@ -143,18 +224,11 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (!day.isAvailable && day.onCallEligible) {
-        return NextResponse.json(
-          { error: "On-call cannot be enabled when not available" },
-          { status: 400 }
-        );
-      }
-      if (!day.isAvailable && day.openPoolEligible) {
-        return NextResponse.json(
-          { error: "Open Pool cannot be enabled when not available" },
-          { status: 400 }
-        );
-      }
+    }
+
+    const flagError = validateDayFlags(days);
+    if (flagError) {
+      return NextResponse.json({ error: flagError }, { status: 400 });
     }
 
     const { period: savedPeriod } = await saveCleanerAvailability(

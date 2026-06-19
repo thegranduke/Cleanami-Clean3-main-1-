@@ -11,6 +11,9 @@ import {
   type AvailabilityPeriod,
   type SubmissionLateStatus,
 } from "@/lib/cleaner/availability-deadline";
+import {
+  resolveAvailabilityBootstrapState,
+} from "@/lib/cleaner/availability-bootstrap";
 import { and, eq, gte, lte } from "drizzle-orm";
 
 export type AvailabilityDayInput = {
@@ -37,6 +40,22 @@ export type AvailabilityDayState = {
 const DEFAULT_START = "08:00:00";
 const DEFAULT_END = "20:00:00";
 
+export async function countCleanerAvailabilityInPeriod(
+  cleanerId: string,
+  period: AvailabilityPeriod
+): Promise<number> {
+  const rows = await db.query.availability.findMany({
+    where: and(
+      eq(availability.cleanerId, cleanerId),
+      gte(availability.date, period.start),
+      lte(availability.date, period.end)
+    ),
+    columns: { id: true },
+  });
+
+  return rows.length;
+}
+
 export async function getCleanerAvailability(
   cleanerId: string
 ): Promise<{
@@ -45,11 +64,11 @@ export async function getCleanerAvailability(
   deadline: ReturnType<typeof getAvailabilityWindow>["deadline"];
   displayMode: AvailabilityDisplayMode;
   closedMessage: string | null;
+  canBootstrap: boolean;
+  bootstrapDates: string[];
+  bootstrapMessage: string | null;
 }> {
   const { period, deadline, displayMode } = getAvailabilityWindow();
-  const closedMessage = deadline.canSubmitRegular
-    ? null
-    : getSubmissionClosedMessage(deadline, period, displayMode);
 
   const rows = await db.query.availability.findMany({
     where: and(
@@ -58,6 +77,18 @@ export async function getCleanerAvailability(
       lte(availability.date, period.end)
     ),
   });
+
+  const bootstrap = resolveAvailabilityBootstrapState({
+    displayMode,
+    period,
+    existingRowCount: rows.length,
+  });
+
+  const closedMessage = bootstrap.canBootstrap
+    ? null
+    : deadline.canSubmitRegular
+      ? null
+      : getSubmissionClosedMessage(deadline, period, displayMode);
 
   const byDate = new Map(
     rows.map((row) => [
@@ -81,7 +112,16 @@ export async function getCleanerAvailability(
     };
   });
 
-  return { period, days, deadline, displayMode, closedMessage };
+  return {
+    period,
+    days,
+    deadline,
+    displayMode,
+    closedMessage,
+    canBootstrap: bootstrap.canBootstrap,
+    bootstrapDates: bootstrap.bootstrapDates,
+    bootstrapMessage: bootstrap.bootstrapMessage,
+  };
 }
 
 export async function saveCleanerAvailability(
@@ -165,6 +205,48 @@ export async function saveCleanerAvailabilityPreferences(
           eq(availability.date, pref.date)
         )
       );
+  }
+
+  return { period };
+}
+
+export async function saveCleanerBootstrapAvailability(
+  cleanerId: string,
+  days: AvailabilityDayInput[],
+  bootstrapDates: string[]
+): Promise<{ period: AvailabilityPeriod }> {
+  const { period } = getAvailabilityWindow();
+  const allowed = new Set(bootstrapDates);
+  const now = new Date();
+
+  for (const day of days) {
+    if (!allowed.has(day.date)) {
+      continue;
+    }
+
+    await db
+      .delete(availability)
+      .where(
+        and(
+          eq(availability.cleanerId, cleanerId),
+          eq(availability.date, day.date)
+        )
+      );
+
+    if (day.isAvailable) {
+      await db.insert(availability).values({
+        cleanerId,
+        date: day.date,
+        availabilityType: "vacation_rental",
+        startTime: DEFAULT_START,
+        endTime: DEFAULT_END,
+        onCallEligible: day.onCallEligible,
+        openPoolEligible: day.openPoolEligible ?? false,
+        isGracePeriod: false,
+        submissionStatus: "on_time",
+        submittedAt: now,
+      });
+    }
   }
 
   return { period };

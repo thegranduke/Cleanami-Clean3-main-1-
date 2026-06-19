@@ -22,6 +22,9 @@ type AvailabilityResponse = {
   period: { start: string; end: string; dates: string[] };
   days: AvailabilityDay[];
   displayMode: "submit" | "locked" | "preview";
+  canBootstrap?: boolean;
+  bootstrapDates?: string[];
+  bootstrapMessage?: string | null;
   deadline: {
     pastDeadline: boolean;
     lateStatus: "on_time" | "late_accepted" | "late_warning" | null;
@@ -55,13 +58,20 @@ export function AvailabilityPageClient() {
     "warning"
   );
   const [closedMessage, setClosedMessage] = useState<string | null>(null);
+  const [canBootstrap, setCanBootstrap] = useState(false);
+  const [bootstrapDates, setBootstrapDates] = useState<string[]>([]);
+  const [bootstrapMessage, setBootstrapMessage] = useState<string | null>(
+    null
+  );
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const bootstrapDateSet = new Set(bootstrapDates);
   const canSaveRegular = deadline?.canSubmitRegular ?? false;
   const canSavePreferences = deadline?.canEditPreferences ?? false;
-  const canSave = canSaveRegular || canSavePreferences;
+  const canSaveBootstrap = canBootstrap && bootstrapDates.length > 0;
+  const canSave = canSaveRegular || canSavePreferences || canSaveBootstrap;
 
   useEffect(() => {
     return () => {
@@ -89,6 +99,9 @@ export function AvailabilityPageClient() {
         setDisplayMode(data.displayMode);
         setDeadline(data.deadline);
         setClosedMessage(data.closedMessage ?? null);
+        setCanBootstrap(data.canBootstrap ?? false);
+        setBootstrapDates(data.bootstrapDates ?? []);
+        setBootstrapMessage(data.bootstrapMessage ?? null);
       } catch {
         setLoadError("Could not load availability. Please refresh and try again.");
         setLoadErrorVariant("error");
@@ -132,14 +145,27 @@ export function AvailabilityPageClient() {
     setJustSaved(false);
     setSaveNotice(null);
 
-    const isPreferencesOnly = canSavePreferences && !canSaveRegular;
+    const isPreferencesOnly = canSavePreferences && !canSaveRegular && !canSaveBootstrap;
+    const isBootstrap = canSaveBootstrap;
 
     try {
       const response = await fetch("/api/cleaner/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          isPreferencesOnly
+          isBootstrap
+            ? {
+                mode: "bootstrap",
+                days: days
+                  .filter((d) => bootstrapDateSet.has(d.date))
+                  .map((d) => ({
+                    date: d.date,
+                    isAvailable: d.isAvailable,
+                    onCallEligible: d.onCallEligible,
+                    openPoolEligible: d.openPoolEligible,
+                  })),
+              }
+            : isPreferencesOnly
             ? {
                 mode: "preferences",
                 preferences: days
@@ -169,6 +195,21 @@ export function AvailabilityPageClient() {
 
       if (data.lateMessage) {
         setSaveNotice(data.lateMessage);
+      } else if (data.message) {
+        setSaveNotice(data.message);
+      }
+
+      if (isBootstrap) {
+        const refresh = await fetch("/api/cleaner/availability");
+        const refreshed = (await refresh.json()) as AvailabilityResponse;
+        if (refresh.ok) {
+          setDays(refreshed.days);
+          setCanBootstrap(refreshed.canBootstrap ?? false);
+          setBootstrapDates(refreshed.bootstrapDates ?? []);
+          setBootstrapMessage(refreshed.bootstrapMessage ?? null);
+          setClosedMessage(refreshed.closedMessage ?? null);
+          setDeadline(refreshed.deadline);
+        }
       }
 
       setJustSaved(true);
@@ -238,6 +279,12 @@ export function AvailabilityPageClient() {
         </div>
       )}
 
+      {bootstrapMessage && canSaveBootstrap && (
+        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+          {bootstrapMessage}
+        </div>
+      )}
+
       {closedMessage && (
         <div
           className={cn(
@@ -259,16 +306,30 @@ export function AvailabilityPageClient() {
 
       <ul className="space-y-3">
         {days.map((day) => {
+          const isBootstrapDay = canSaveBootstrap && bootstrapDateSet.has(day.date);
+          const isPastDayInPeriod =
+            canSaveBootstrap && !bootstrapDateSet.has(day.date);
           const canEditDayPreferences =
-            canSavePreferences && day.isAvailable && !canSaveRegular;
+            canSavePreferences && day.isAvailable && !canSaveRegular && !canSaveBootstrap;
+          const canEditAvailable = canSaveRegular || isBootstrapDay;
+          const canEditPoolToggles =
+            canSaveRegular || isBootstrapDay || canEditDayPreferences;
 
           return (
             <li
               key={day.date}
-              className="rounded-xl border bg-white p-4 shadow-sm"
+              className={cn(
+                "rounded-xl border bg-white p-4 shadow-sm",
+                isPastDayInPeriod && "opacity-50"
+              )}
             >
               <p className="mb-3 text-sm font-semibold text-gray-900">
                 {day.label}
+                {isPastDayInPeriod && (
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    (locked — before you joined)
+                  </span>
+                )}
               </p>
 
               <div className="space-y-3">
@@ -278,14 +339,14 @@ export function AvailabilityPageClient() {
                     type="button"
                     role="switch"
                     aria-checked={day.isAvailable}
-                    disabled={!canSaveRegular}
+                    disabled={!canEditAvailable}
                     onClick={() =>
                       updateDay(day.date, { isAvailable: !day.isAvailable })
                     }
                     className={cn(
                       "relative h-6 w-11 rounded-full transition-colors",
                       day.isAvailable ? "bg-brand" : "bg-gray-300",
-                      !canSaveRegular && "opacity-50"
+                      !canEditAvailable && "opacity-50"
                     )}
                   >
                     <span
@@ -305,7 +366,7 @@ export function AvailabilityPageClient() {
                         type="button"
                         role="switch"
                         aria-checked={day.onCallEligible}
-                        disabled={!canSaveRegular && !canEditDayPreferences}
+                        disabled={!canEditPoolToggles}
                         onClick={() =>
                           updateDay(day.date, {
                             onCallEligible: !day.onCallEligible,
@@ -314,9 +375,7 @@ export function AvailabilityPageClient() {
                         className={cn(
                           "relative h-6 w-11 rounded-full transition-colors",
                           day.onCallEligible ? "bg-indigo-600" : "bg-gray-300",
-                          !canSaveRegular &&
-                            !canEditDayPreferences &&
-                            "opacity-50"
+                          !canEditPoolToggles && "opacity-50"
                         )}
                       >
                         <span
@@ -334,7 +393,7 @@ export function AvailabilityPageClient() {
                         type="button"
                         role="switch"
                         aria-checked={day.openPoolEligible}
-                        disabled={!canSaveRegular && !canEditDayPreferences}
+                        disabled={!canEditPoolToggles}
                         onClick={() =>
                           updateDay(day.date, {
                             openPoolEligible: !day.openPoolEligible,
@@ -343,9 +402,7 @@ export function AvailabilityPageClient() {
                         className={cn(
                           "relative h-6 w-11 rounded-full transition-colors",
                           day.openPoolEligible ? "bg-teal-600" : "bg-gray-300",
-                          !canSaveRegular &&
-                            !canEditDayPreferences &&
-                            "opacity-50"
+                          !canEditPoolToggles && "opacity-50"
                         )}
                       >
                         <span
@@ -379,9 +436,11 @@ export function AvailabilityPageClient() {
         >
           {saving
             ? "Saving…"
-            : canSaveRegular
-              ? "Save availability"
-              : "Save preferences"}
+            : canSaveBootstrap
+              ? "Save remaining days"
+              : canSaveRegular
+                ? "Save availability"
+                : "Save preferences"}
         </button>
         {justSaved && (
           <span
