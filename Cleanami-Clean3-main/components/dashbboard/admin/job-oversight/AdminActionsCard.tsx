@@ -35,7 +35,9 @@ export function AdminActionsCard({
     useQuery<GetAvailableCleanersForJobResponse>({
       queryKey: ['available-cleaners', job.id],
       queryFn: async () => {
-        const res = await fetch(`/api/jobs/${job.id}/available-cleaners`);
+        const res = await fetch(
+          `/api/jobs/${job.id}/available-cleaners?all=true`
+        );
         if (!res.ok) throw new Error('Failed to fetch available cleaners');
         return res.json();
       },
@@ -109,7 +111,7 @@ export function AdminActionsCard({
     onAction({
       title: 'Trigger Urgent Replacement',
       message:
-        'This removes the primary cleaner. If a backup is assigned, they are promoted automatically with a $10 bonus. Otherwise nearby on-call cleaners are notified to accept the job. Continue?',
+        'This removes the primary cleaner. If a backup is assigned, they are promoted automatically with a $10 bonus. Otherwise nearby cleaners are notified first, then on-call/open pool, then all eligible cleaners. You can also assign anyone manually below. Continue?',
       loadingText: 'Processing replacement…',
       confirmButtonText: 'Trigger replacement',
       confirmButtonClassName: 'bg-orange-600 hover:bg-orange-500',
@@ -141,7 +143,7 @@ export function AdminActionsCard({
           );
         } else {
           toast.success(
-            `Primary removed. ${data.notifiedCount ?? 0} cleaner(s) notified — first to accept gets the job.`
+            `Primary removed. ${data.notifiedCount ?? 0} cleaner(s) notified (nearby → on-call/open pool → all eligible). First to accept gets the job, or assign manually below.`
           );
         }
       },
@@ -199,7 +201,7 @@ export function AdminActionsCard({
             htmlFor="reassign-cleaner"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Reassign Cleaner
+            Reassign Cleaner (all eligible)
           </label>
           {loadingCleaners ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -208,7 +210,7 @@ export function AdminActionsCard({
             </div>
           ) : availableCleaners.length === 0 ? (
             <div className="text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
-              No cleaners available in this city
+              No eligible cleaners found. Check job assignments and onboarding.
             </div>
           ) : (
             <div className="flex rounded-md shadow-sm">
@@ -225,7 +227,9 @@ export function AdminActionsCard({
                     {cleaner.fullName}
                     {cleaner.reliabilityScore &&
                       ` (${cleaner.reliabilityScore}%)`}
-                    {` - ${cleaner.distance} mi`}
+                    {cleaner.distance != null
+                      ? ` - ${cleaner.distance} mi`
+                      : ' - distance n/a'}
                     {cleaner.onCallStatus === 'on_job' && ' - On Job'}
                   </option>
                 ))}

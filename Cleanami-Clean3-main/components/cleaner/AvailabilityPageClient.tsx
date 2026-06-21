@@ -307,8 +307,6 @@ export function AvailabilityPageClient() {
       <ul className="space-y-3">
         {days.map((day) => {
           const isBootstrapDay = canSaveBootstrap && bootstrapDateSet.has(day.date);
-          const isPastDayInPeriod =
-            canSaveBootstrap && !bootstrapDateSet.has(day.date);
           const canEditDayPreferences =
             canSavePreferences && day.isAvailable && !canSaveRegular && !canSaveBootstrap;
           const canEditAvailable = canSaveRegular || isBootstrapDay;
@@ -318,18 +316,10 @@ export function AvailabilityPageClient() {
           return (
             <li
               key={day.date}
-              className={cn(
-                "rounded-xl border bg-white p-4 shadow-sm",
-                isPastDayInPeriod && "opacity-50"
-              )}
+              className="rounded-xl border bg-white p-4 shadow-sm"
             >
               <p className="mb-3 text-sm font-semibold text-gray-900">
                 {day.label}
-                {isPastDayInPeriod && (
-                  <span className="ml-2 text-xs font-normal text-gray-500">
-                    (locked — before you joined)
-                  </span>
-                )}
               </p>
 
               <div className="space-y-3">

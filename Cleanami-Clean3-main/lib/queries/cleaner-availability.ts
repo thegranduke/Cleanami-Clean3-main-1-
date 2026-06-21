@@ -12,6 +12,7 @@ import {
   type SubmissionLateStatus,
 } from "@/lib/cleaner/availability-deadline";
 import {
+  getTodayEtIso,
   resolveAvailabilityBootstrapState,
 } from "@/lib/cleaner/availability-bootstrap";
 import { and, eq, gte, lte } from "drizzle-orm";
@@ -39,6 +40,30 @@ export type AvailabilityDayState = {
 
 const DEFAULT_START = "08:00:00";
 const DEFAULT_END = "20:00:00";
+
+/** Hide past dates in locked/bootstrap views — only today onward (ET). */
+function filterDaysForDisplay(
+  days: AvailabilityDayState[],
+  input: {
+    displayMode: AvailabilityDisplayMode;
+    canBootstrap: boolean;
+    bootstrapDates: string[];
+    canSubmitRegular: boolean;
+  }
+): AvailabilityDayState[] {
+  const today = getTodayEtIso();
+
+  if (input.canBootstrap) {
+    const allowed = new Set(input.bootstrapDates);
+    return days.filter((day) => allowed.has(day.date));
+  }
+
+  if (input.displayMode === "locked" && !input.canSubmitRegular) {
+    return days.filter((day) => day.date >= today);
+  }
+
+  return days;
+}
 
 export async function countCleanerAvailabilityInPeriod(
   cleanerId: string,
@@ -101,7 +126,7 @@ export async function getCleanerAvailability(
     ])
   );
 
-  const days = period.dates.map((date) => {
+  const allDays = period.dates.map((date) => {
     const existing = byDate.get(date);
     return {
       date,
@@ -110,6 +135,13 @@ export async function getCleanerAvailability(
       onCallEligible: existing?.onCallEligible ?? false,
       openPoolEligible: existing?.openPoolEligible ?? false,
     };
+  });
+
+  const days = filterDaysForDisplay(allDays, {
+    displayMode,
+    canBootstrap: bootstrap.canBootstrap,
+    bootstrapDates: bootstrap.bootstrapDates,
+    canSubmitRegular: deadline.canSubmitRegular,
   });
 
   return {

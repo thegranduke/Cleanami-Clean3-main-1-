@@ -1,4 +1,7 @@
-import { getAvailableCleanersForJob } from "@/lib/queries/cleaners-proximity";
+import {
+  getAllEligibleCleanersForJob,
+  getAvailableCleanersForJob,
+} from "@/lib/queries/cleaners-proximity";
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -21,19 +24,25 @@ export async function GET(
 
     // Get query params for options
     const searchParams = request.nextUrl.searchParams;
-    const radiusMiles = searchParams.get("radius")
-      ? parseInt(searchParams.get("radius")!)
-      : SERVICE_RADIUS_MILES;
+    const includeAll = searchParams.get("all") === "true";
+    const radiusMiles = includeAll
+      ? null
+      : searchParams.get("radius")
+        ? parseInt(searchParams.get("radius")!)
+        : SERVICE_RADIUS_MILES;
     const includeOnJob = searchParams.get("includeOnJob") !== "false";
 
-    const result = await getAvailableCleanersForJob(id, {
-      radiusMiles,
-      includeOnJob,
-    });
+    const result = includeAll
+      ? await getAllEligibleCleanersForJob(id, { includeOnJob })
+      : await getAvailableCleanersForJob(id, {
+          radiusMiles,
+          includeOnJob,
+        });
 
     return NextResponse.json({
       cleaners: result.cleaners,
-      radiusMiles,
+      radiusMiles: includeAll ? null : radiusMiles,
+      includeAll,
       propertyAddress: result.propertyAddress,
     });
   } catch (error) {
@@ -50,6 +59,11 @@ export async function GET(
   }
 }
 
-export type GetAvailableCleanersForJobResponse = Awaited<
-  ReturnType<typeof getAvailableCleanersForJob>
->;
+export type GetAvailableCleanersForJobResponse = {
+  cleaners: Awaited<
+    ReturnType<typeof getAvailableCleanersForJob>
+  >["cleaners"];
+  radiusMiles: number | null;
+  includeAll?: boolean;
+  propertyAddress: string;
+};

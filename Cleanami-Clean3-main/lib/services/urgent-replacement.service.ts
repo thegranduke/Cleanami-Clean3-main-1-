@@ -12,10 +12,10 @@ import {
 } from "@/db/schemas";
 import { isCleanerAssignmentEligible } from "@/lib/cleaner/eligibility";
 import { getCleanerUserId } from "@/lib/queries/cleaner-notifications";
-import { getAvailableCleanersForJob } from "@/lib/queries/cleaners-proximity";
+import { getAllEligibleCleanersForJob, getAvailableCleanersForJob } from "@/lib/queries/cleaners-proximity";
 import { and, eq, inArray, ne, or } from "drizzle-orm";
 
-const URGENT_NOTIFY_LIMIT = 5;
+const URGENT_NEARBY_NOTIFY_LIMIT = 5;
 const CALL_OUT_PENALTY = 15;
 
 export type UrgentReplacementResult =
@@ -85,23 +85,80 @@ async function hasScheduleConflict(
   return rows.length > 0;
 }
 
-async function isOnCallOrOpenPoolForJob(
-  cleanerId: string,
-  checkInTime: Date
-): Promise<boolean> {
+async function getOnCallOpenPoolCleanerIds(
+  checkInTime: Date,
+  excludeCleanerIds: Set<string>
+): Promise<string[]> {
   const date = jobDateString(checkInTime);
-  const row = await db.query.availability.findFirst({
+  const rows = await db.query.availability.findMany({
     where: and(
-      eq(availability.cleanerId, cleanerId),
       eq(availability.date, date),
       or(
         eq(availability.onCallEligible, true),
         eq(availability.openPoolEligible, true)
       )
     ),
-    columns: { id: true },
+    columns: { cleanerId: true },
   });
-  return Boolean(row);
+
+  const ids: string[] = [];
+  for (const row of rows) {
+    if (excludeCleanerIds.has(row.cleanerId)) continue;
+    if (ids.includes(row.cleanerId)) continue;
+
+    const cleaner = await db.query.cleaners.findFirst({
+      where: eq(cleaners.id, row.cleanerId),
+      columns: { eligibleForAssignments: true },
+    });
+    if (!isCleanerAssignmentEligible(cleaner)) continue;
+    if (await hasScheduleConflict(row.cleanerId, checkInTime)) continue;
+
+    ids.push(row.cleanerId);
+  }
+
+  return ids;
+}
+
+/** Nearby first, then on-call/open pool, then all other eligible cleaners. */
+async function buildUrgentNotificationCleanerIds(
+  jobId: string,
+  checkInTime: Date,
+  excludeCleanerIds: Set<string>
+): Promise<string[]> {
+  const notified = new Set<string>();
+  const ordered: string[] = [];
+
+  const add = (cleanerId: string) => {
+    if (excludeCleanerIds.has(cleanerId) || notified.has(cleanerId)) return;
+    notified.add(cleanerId);
+    ordered.push(cleanerId);
+  };
+
+  const { cleaners: nearby } = await getAvailableCleanersForJob(jobId, {
+    includeOnJob: false,
+  });
+  for (const candidate of nearby.slice(0, URGENT_NEARBY_NOTIFY_LIMIT)) {
+    if (await hasScheduleConflict(candidate.id, checkInTime, jobId)) continue;
+    add(candidate.id);
+  }
+
+  for (const cleanerId of await getOnCallOpenPoolCleanerIds(
+    checkInTime,
+    excludeCleanerIds
+  )) {
+    if (await hasScheduleConflict(cleanerId, checkInTime, jobId)) continue;
+    add(cleanerId);
+  }
+
+  const { cleaners: allEligible } = await getAllEligibleCleanersForJob(jobId, {
+    includeOnJob: false,
+  });
+  for (const candidate of allEligible) {
+    if (await hasScheduleConflict(candidate.id, checkInTime, jobId)) continue;
+    add(candidate.id);
+  }
+
+  return ordered;
 }
 
 /** Job still has an open urgent swap, no primary, and status is unassigned. */
@@ -229,41 +286,8 @@ export async function canCleanerAcceptUrgentJob(
     return { eligible: false, reason: "You already have a job at this time." };
   }
 
-  const cleanerUserId = cleaner?.userId;
-  if (cleanerUserId) {
-    const notified = await db.query.notifications.findFirst({
-      where: and(
-        eq(notifications.jobId, jobId),
-        eq(notifications.userId, cleanerUserId),
-        or(
-          eq(notifications.type, "urgent_job"),
-          eq(notifications.type, "swap_available")
-        )
-      ),
-      columns: { id: true },
-    });
-    if (notified) {
-      return { eligible: true };
-    }
-  }
-
-  if (await isOnCallOrOpenPoolForJob(cleanerId, job.checkInTime)) {
-    return { eligible: true };
-  }
-
-  if (job.propertyId) {
-    const { cleaners: nearby } = await getAvailableCleanersForJob(jobId, {
-      includeOnJob: false,
-    });
-    if (nearby.some((c) => c.id === cleanerId)) {
-      return { eligible: true };
-    }
-  }
-
-  return {
-    eligible: false,
-    reason: "You are not in the on-call pool for this job.",
-  };
+  // Any assignment-eligible cleaner may accept an open urgent job (admin-expanded pool).
+  return { eligible: true };
 }
 
 export async function triggerUrgentReplacement(
@@ -377,17 +401,16 @@ export async function triggerUrgentReplacement(
   });
 
   const address = job.property?.address ?? "a nearby property";
-  const { cleaners: candidates } = await getAvailableCleanersForJob(jobId, {
-    includeOnJob: false,
-  });
+  const excludeIds = new Set([primaryCleanerId]);
+  const toNotify = await buildUrgentNotificationCleanerIds(
+    jobId,
+    job.checkInTime!,
+    excludeIds
+  );
 
-  const toNotify = candidates
-    .filter((c) => c.id !== primaryCleanerId)
-    .slice(0, URGENT_NOTIFY_LIMIT);
-
-  for (const candidate of toNotify) {
+  for (const cleanerId of toNotify) {
     await notifyCleaner(
-      candidate.id,
+      cleanerId,
       "swap_available",
       "Urgent job available",
       `Tap Accept to claim an urgent clean at ${address}. Includes a $10 bonus. First to accept gets the job.`,
