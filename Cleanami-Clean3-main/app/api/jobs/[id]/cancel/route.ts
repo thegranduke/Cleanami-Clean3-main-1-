@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { jobs, jobsToCleaners } from "@/db/schemas";
-import { eq } from "drizzle-orm";
+import { cancelJobAsAdmin } from "@/lib/services/customer-cancellation.service";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(
@@ -11,30 +9,19 @@ export async function POST(
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
-    const user = data?.claims;
-    const userRole = user?.user_metadata?.role;
+    const userRole = data?.claims?.user_metadata?.role as string | undefined;
 
     if (userRole !== "admin" && userRole !== "super_admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
     const { id } = await params;
-
-    await db.delete(jobsToCleaners).where(eq(jobsToCleaners.jobId, id));
-
-    await db
-      .update(jobs)
-      .set({
-        status: "canceled",
-        updatedAt: new Date(),
-      })
-      .where(eq(jobs.id, id));
-
-    return NextResponse.json({ success: true });
+    const result = await cancelJobAsAdmin(id);
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Error canceling job:", error);
-    return NextResponse.json(
-      { error: "Failed to cancel job" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Failed to cancel job";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

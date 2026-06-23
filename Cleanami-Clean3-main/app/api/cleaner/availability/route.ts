@@ -5,13 +5,13 @@ import {
 } from "@/lib/cleaner-auth";
 import { requireCleanerAssignmentEligible } from "@/lib/cleaner/require-eligible";
 import {
-  assertBootstrapDayAllowed,
-  resolveAvailabilityBootstrapState,
-} from "@/lib/cleaner/availability-bootstrap";
+  assertOverrideDayAllowed,
+  resolveAvailabilityOverrideState,
+} from "@/lib/cleaner/availability-override";
 import {
   formatDateRange,
   getAvailabilityWindow,
-  getLateSubmissionMessage,
+  getMissedPeriodForOverride,
   getSubmissionClosedMessage,
 } from "@/lib/cleaner/availability-deadline";
 import {
@@ -19,10 +19,14 @@ import {
   getCleanerAvailability,
   saveCleanerAvailability,
   saveCleanerAvailabilityPreferences,
-  saveCleanerBootstrapAvailability,
+  saveCleanerLateOverrideAvailability,
   type AvailabilityDayInput,
   type AvailabilityPreferenceInput,
 } from "@/lib/queries/cleaner-availability";
+import { triggerAssignmentEngine } from "@/lib/services/trigger-assignment-engine";
+import { db } from "@/db";
+import { cleaners } from "@/db/schemas";
+import { eq } from "drizzle-orm";
 
 export async function GET() {
   const { cleanerId, error } = await getCleanerAuth();
@@ -55,7 +59,7 @@ export async function GET() {
 }
 
 type SaveBody = {
-  mode?: "full" | "preferences" | "bootstrap";
+  mode?: "full" | "preferences" | "override";
   days?: AvailabilityDayInput[];
   preferences?: AvailabilityPreferenceInput[];
 };
@@ -94,17 +98,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as SaveBody;
     const { period, deadline, displayMode } = getAvailabilityWindow();
 
-    const existingRowCount = await countCleanerAvailabilityInPeriod(
-      cleanerId,
-      period
-    );
-    const bootstrap = resolveAvailabilityBootstrapState({
-      displayMode,
-      period,
-      existingRowCount,
-    });
-
-    if (body.mode === "bootstrap") {
+    if (body.mode === "override") {
       const days = body.days;
 
       if (!days?.length) {
@@ -114,17 +108,33 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!bootstrap.canBootstrap) {
+      const cleaner = await db.query.cleaners.findFirst({
+        where: eq(cleaners.id, cleanerId),
+        columns: { availabilityLateOverridePeriodStart: true },
+      });
+
+      const missedPeriod = getMissedPeriodForOverride();
+      const missedRowCount = missedPeriod
+        ? await countCleanerAvailabilityInPeriod(cleanerId, missedPeriod)
+        : 0;
+
+      const override = resolveAvailabilityOverrideState({
+        lateOverridePeriodStart:
+          cleaner?.availabilityLateOverridePeriodStart ?? null,
+        existingRowCountForMissedPeriod: missedRowCount,
+      });
+
+      if (!override.canLateOverride || !override.overridePeriod) {
         return NextResponse.json(
           {
             error:
-              "Mid-cycle availability setup is not available. You may already have submitted for this block, or the submission window is open.",
+              "Catch-up submission is not available. You may have already submitted for this block or used your one-time override.",
           },
           { status: 403 }
         );
       }
 
-      const allowed = new Set(bootstrap.bootstrapDates);
+      const overridePeriod = override.overridePeriod;
       const flagError = validateDayFlags(days);
       if (flagError) {
         return NextResponse.json({ error: flagError }, { status: 400 });
@@ -135,7 +145,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
         try {
-          assertBootstrapDayAllowed(day.date, period, allowed);
+          assertOverrideDayAllowed(day.date, overridePeriod);
         } catch (err) {
           return NextResponse.json(
             { error: err instanceof Error ? err.message : "Invalid date" },
@@ -144,16 +154,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const { period: savedPeriod } = await saveCleanerBootstrapAvailability(
+      const { period: savedPeriod } = await saveCleanerLateOverrideAvailability(
         cleanerId,
         days,
-        bootstrap.bootstrapDates
+        overridePeriod
       );
+
+      void triggerAssignmentEngine();
 
       return NextResponse.json({
         success: true,
-        mode: "bootstrap",
-        message: `Availability saved for ${formatDateRange(savedPeriod.start, savedPeriod.end)} (remaining days this cycle)`,
+        mode: "override",
+        message: `Catch-up availability saved for ${formatDateRange(savedPeriod.start, savedPeriod.end)}. We're checking for matching jobs now.`,
       });
     }
 
@@ -233,20 +245,15 @@ export async function POST(request: NextRequest) {
 
     const { period: savedPeriod } = await saveCleanerAvailability(
       cleanerId,
-      days,
-      deadline.lateStatus
+      days
     );
 
-    const lateMessage = getLateSubmissionMessage(deadline.lateStatus);
+    void triggerAssignmentEngine();
 
     return NextResponse.json({
       success: true,
       mode: "full",
-      message: `Availability saved for ${formatDateRange(savedPeriod.start, savedPeriod.end)}`,
-      submissionStatus: deadline.lateStatus ?? "on_time",
-      lateMessage,
-      isGracePeriod: deadline.isGracePeriod,
-      pastDeadline: deadline.pastDeadline,
+      message: `Availability saved for ${formatDateRange(savedPeriod.start, savedPeriod.end)}. We're checking for matching jobs now.`,
     });
   } catch (err) {
     console.error("[POST /api/cleaner/availability]", err);

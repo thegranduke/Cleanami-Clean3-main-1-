@@ -1,7 +1,7 @@
 
 import 'server-only';
 import { db } from '@/db';
-import { properties, customers, subscriptions, jobs } from '@/db/schemas';
+import { properties, customers, subscriptions, jobs, checklistFiles } from '@/db/schemas';
 import { eq, sql, and } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import {
@@ -190,3 +190,70 @@ export async function getPropertyDetails(propertyId: string) {
 }
 
 export type PropertyDetails = Awaited<ReturnType<typeof getPropertyDetails>>;
+
+export type MergePropertiesResult = {
+  sourcePropertyId: string;
+  targetPropertyId: string;
+  jobsMoved: number;
+  subscriptionsMoved: number;
+  checklistFilesMoved: number;
+};
+
+export async function mergeProperties(
+  sourcePropertyId: string,
+  targetPropertyId: string
+): Promise<MergePropertiesResult> {
+  if (sourcePropertyId === targetPropertyId) {
+    throw new Error("Source and target property must be different");
+  }
+
+  const [source, target] = await Promise.all([
+    db.query.properties.findFirst({ where: eq(properties.id, sourcePropertyId) }),
+    db.query.properties.findFirst({ where: eq(properties.id, targetPropertyId) }),
+  ]);
+
+  if (!source || !target) {
+    throw new Error("Property not found");
+  }
+
+  if (source.customerId !== target.customerId) {
+    throw new Error("Properties must belong to the same customer to merge");
+  }
+
+  return db.transaction(async (tx) => {
+    const movedJobs = await tx
+      .update(jobs)
+      .set({ propertyId: targetPropertyId, updatedAt: new Date() })
+      .where(eq(jobs.propertyId, sourcePropertyId))
+      .returning({ id: jobs.id });
+
+    const movedSubscriptions = await tx
+      .update(subscriptions)
+      .set({ propertyId: targetPropertyId, updatedAt: new Date() })
+      .where(eq(subscriptions.propertyId, sourcePropertyId))
+      .returning({ id: subscriptions.id });
+
+    const movedChecklists = await tx
+      .update(checklistFiles)
+      .set({ propertyId: targetPropertyId })
+      .where(eq(checklistFiles.propertyId, sourcePropertyId))
+      .returning({ id: checklistFiles.id });
+
+    await tx
+      .delete(properties)
+      .where(
+        and(
+          eq(properties.id, sourcePropertyId),
+          eq(properties.customerId, source.customerId)
+        )
+      );
+
+    return {
+      sourcePropertyId,
+      targetPropertyId,
+      jobsMoved: movedJobs.length,
+      subscriptionsMoved: movedSubscriptions.length,
+      checklistFilesMoved: movedChecklists.length,
+    };
+  });
+}

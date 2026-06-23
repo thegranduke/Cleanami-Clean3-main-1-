@@ -1,5 +1,5 @@
 
-import { pgTable, uuid, timestamp, text, integer, boolean, numeric, jsonb, index, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, timestamp, text, integer, boolean, numeric, jsonb, index, pgEnum, date } from "drizzle-orm/pg-core";
 import { users } from "./users.schema";
 import { cleanerInvitations } from "./cleanerInvitations.schema";
 
@@ -50,6 +50,8 @@ export const cleaners = pgTable("cleaners", {
   onboardingStep: integer("onboarding_step").default(1),
   /** Admin-controlled + auto-enabled when onboarding + Stripe payouts are complete */
   eligibleForAssignments: boolean("eligible_for_assignments").default(false).notNull(),
+  /** Period start (Monday) for which the one-time late catch-up override was consumed */
+  availabilityLateOverridePeriodStart: date("availability_late_override_period_start"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

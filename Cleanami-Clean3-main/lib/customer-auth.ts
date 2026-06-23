@@ -12,8 +12,6 @@ export type CustomerAuthResult = {
   error: string | null;
 };
 
-const OWNER_PORTAL_ROLES = new Set(["user"]);
-
 async function resolveCustomerEmail(
   claims: Record<string, unknown>
 ): Promise<string | null> {
@@ -62,7 +60,8 @@ async function lookupCustomerByEmail(email: string) {
 
 /**
  * Resolves the customer row linked to the signed-in user's email.
- * Property owners with admin access use the same lookup.
+ * Regular customers (role=user) and admin/super_admin accounts that have a
+ * linked customers row (same email, portal_access_enabled) may use customer APIs.
  */
 export async function getCustomerAuth(): Promise<CustomerAuthResult> {
   const supabase = await createClient();
@@ -78,7 +77,10 @@ export async function getCustomerAuth(): Promise<CustomerAuthResult> {
     return { customerId: null, error: "Forbidden" };
   }
 
-  if (!userRole || !OWNER_PORTAL_ROLES.has(userRole)) {
+  const isCustomer = userRole === "user";
+  const isAdmin = userRole === "admin" || userRole === "super_admin";
+
+  if (!isCustomer && !isAdmin) {
     return { customerId: null, error: "Forbidden" };
   }
 

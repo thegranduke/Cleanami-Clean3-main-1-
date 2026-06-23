@@ -1,5 +1,4 @@
-'use client';
-
+import { usePathname } from "next/navigation";
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useMemo } from 'react';
 import { useDebounce } from 'use-debounce';
@@ -19,7 +18,7 @@ async function fetchSubscriptions({ pageParam = 1, queryKey }: { pageParam?: num
     status: SubscriptionStatus;
     search: string;
   };
-  const res = await fetch(`/api/subscriptions?page=${pageParam}&status=${status}&query=${search}`);
+  const res = await fetch(`/api/subscriptions?page=${pageParam}&status=${status}&query=${search}${typeof window !== 'undefined' && window.location.pathname.startsWith('/customer') ? '&ownerScope=1' : ''}`);
   if (!res.ok) {
     throw new Error('Network response was not ok');
   }
@@ -27,6 +26,8 @@ async function fetchSubscriptions({ pageParam = 1, queryKey }: { pageParam?: num
 }
 
 export const SubscriptionsPageClient = () => {
+  const pathname = usePathname();
+  const isCustomerPortal = pathname.startsWith("/customer");
   const queryClient = useQueryClient();
   const [selectedSubscription, setSelectedSubscription] = useState<SubscriptionsWithDetails['data'][number] | null>(null);
   const [statusFilter, setStatusFilter] = useState<SubscriptionStatus | 'all'>('all');
@@ -93,7 +94,7 @@ export const SubscriptionsPageClient = () => {
             </thead>
             {status === 'pending' ? ( <tbody><tr><td colSpan={5} className="p-4 text-center">Loading...</td></tr></tbody> ) 
             : status === 'error' ? ( <tbody><tr><td colSpan={5} className="p-4 text-center text-red-500">Error: {error.message}</td></tr></tbody> ) 
-            : ( <SubscriptionsTable subscriptions={uniqueSubscriptions} onManage={setSelectedSubscription} /> )}
+            : ( <SubscriptionsTable subscriptions={uniqueSubscriptions} onManage={setSelectedSubscription} showCustomerActions={isCustomerPortal} /> )}
             <tfoot>
               <tr>
                 <td colSpan={5} className="p-4 text-center">

@@ -1,8 +1,10 @@
 /** Days of recent past cleans to show on the dashboard schedule. */
 export const DASHBOARD_PAST_DAYS = 7;
 
-/** Max days ahead to show on the dashboard (client request: ~1 month). */
-export const DASHBOARD_FUTURE_DAYS = 30;
+import { PLANNING_PERIOD_DAYS } from "@/lib/cleaner/availability-deadline";
+
+/** Max days ahead to show on the dashboard (aligned with cleaner 14-day planning window). */
+export const DASHBOARD_FUTURE_DAYS = PLANNING_PERIOD_DAYS;
 
 export function getDashboardJobDateRange(reference = new Date()) {
   const startDate = new Date(reference);

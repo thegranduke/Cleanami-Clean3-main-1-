@@ -19,6 +19,7 @@ import { getDashboardJobDateRange, DASHBOARD_FUTURE_DAYS, DASHBOARD_PAST_DAYS } 
 import { KpiCard } from "./ui/KpiCard";
 import { ClientTime } from "./ui/ClientTime";
 import { getStatusBadge } from "../utils";
+import { CustomerJobCancelButton } from "@/components/customer/CustomerJobCancelButton";
 
 async function fetchJobs({
   pageParam = 1,
@@ -231,7 +232,7 @@ export const RealTimeJobBoard = () => {
                     Check-in time
                   </th>
                   <th scope="col" className="relative px-6 py-3">
-                    <span className="sr-only">Details</span>
+                    <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
@@ -289,14 +290,27 @@ export const RealTimeJobBoard = () => {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                        <Link
-                          href={
-                            `${portalPrefix}/job-oversight/${job.id}` as Route
-                          }
-                          className="text-teal-600 hover:text-teal-900"
-                        >
-                          Details
-                        </Link>
+                        <div className="flex flex-col items-end gap-2">
+                          {showOwnerView && (
+                            <CustomerJobCancelButton
+                              jobId={job.id}
+                              status={job.status}
+                              checkInTime={
+                                job.checkInTime
+                                  ? String(job.checkInTime)
+                                  : null
+                              }
+                            />
+                          )}
+                          <Link
+                            href={
+                              `${portalPrefix}/job-oversight/${job.id}` as Route
+                            }
+                            className="text-teal-600 hover:text-teal-900"
+                          >
+                            Details
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))

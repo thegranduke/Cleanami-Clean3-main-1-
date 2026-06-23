@@ -21,18 +21,13 @@ type AvailabilityDay = {
 type AvailabilityResponse = {
   period: { start: string; end: string; dates: string[] };
   days: AvailabilityDay[];
-  displayMode: "submit" | "locked" | "preview";
-  canBootstrap?: boolean;
-  bootstrapDates?: string[];
-  bootstrapMessage?: string | null;
+  displayMode: "submit" | "locked" | "override" | "preview";
+  canLateOverride?: boolean;
+  overrideMessage?: string | null;
   deadline: {
     pastDeadline: boolean;
-    lateStatus: "on_time" | "late_accepted" | "late_warning" | null;
-    isGracePeriod: boolean;
-    rejected: boolean;
     canSubmitRegular: boolean;
     canEditPreferences: boolean;
-    offWeekSunday: boolean;
     closedReason: string | null;
     submissionSunday: string;
     nextSubmissionSunday: string;
@@ -58,20 +53,16 @@ export function AvailabilityPageClient() {
     "warning"
   );
   const [closedMessage, setClosedMessage] = useState<string | null>(null);
-  const [canBootstrap, setCanBootstrap] = useState(false);
-  const [bootstrapDates, setBootstrapDates] = useState<string[]>([]);
-  const [bootstrapMessage, setBootstrapMessage] = useState<string | null>(
-    null
-  );
+  const [canLateOverride, setCanLateOverride] = useState(false);
+  const [overrideMessage, setOverrideMessage] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const bootstrapDateSet = new Set(bootstrapDates);
   const canSaveRegular = deadline?.canSubmitRegular ?? false;
   const canSavePreferences = deadline?.canEditPreferences ?? false;
-  const canSaveBootstrap = canBootstrap && bootstrapDates.length > 0;
-  const canSave = canSaveRegular || canSavePreferences || canSaveBootstrap;
+  const canSaveOverride = canLateOverride && displayMode === "override";
+  const canSave = canSaveRegular || canSavePreferences || canSaveOverride;
 
   useEffect(() => {
     return () => {
@@ -99,9 +90,8 @@ export function AvailabilityPageClient() {
         setDisplayMode(data.displayMode);
         setDeadline(data.deadline);
         setClosedMessage(data.closedMessage ?? null);
-        setCanBootstrap(data.canBootstrap ?? false);
-        setBootstrapDates(data.bootstrapDates ?? []);
-        setBootstrapMessage(data.bootstrapMessage ?? null);
+        setCanLateOverride(data.canLateOverride ?? false);
+        setOverrideMessage(data.overrideMessage ?? null);
       } catch {
         setLoadError("Could not load availability. Please refresh and try again.");
         setLoadErrorVariant("error");
@@ -145,25 +135,24 @@ export function AvailabilityPageClient() {
     setJustSaved(false);
     setSaveNotice(null);
 
-    const isPreferencesOnly = canSavePreferences && !canSaveRegular && !canSaveBootstrap;
-    const isBootstrap = canSaveBootstrap;
+    const isPreferencesOnly =
+      canSavePreferences && !canSaveRegular && !canSaveOverride;
+    const isOverride = canSaveOverride;
 
     try {
       const response = await fetch("/api/cleaner/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          isBootstrap
+          isOverride
             ? {
-                mode: "bootstrap",
-                days: days
-                  .filter((d) => bootstrapDateSet.has(d.date))
-                  .map((d) => ({
-                    date: d.date,
-                    isAvailable: d.isAvailable,
-                    onCallEligible: d.onCallEligible,
-                    openPoolEligible: d.openPoolEligible,
-                  })),
+                mode: "override",
+                days: days.map((d) => ({
+                  date: d.date,
+                  isAvailable: d.isAvailable,
+                  onCallEligible: d.onCallEligible,
+                  openPoolEligible: d.openPoolEligible,
+                })),
               }
             : isPreferencesOnly
             ? {
@@ -193,22 +182,20 @@ export function AvailabilityPageClient() {
         throw new Error(data.error ?? "Save failed");
       }
 
-      if (data.lateMessage) {
-        setSaveNotice(data.lateMessage);
-      } else if (data.message) {
+      if (data.message) {
         setSaveNotice(data.message);
       }
 
-      if (isBootstrap) {
+      if (isOverride) {
         const refresh = await fetch("/api/cleaner/availability");
         const refreshed = (await refresh.json()) as AvailabilityResponse;
         if (refresh.ok) {
           setDays(refreshed.days);
-          setCanBootstrap(refreshed.canBootstrap ?? false);
-          setBootstrapDates(refreshed.bootstrapDates ?? []);
-          setBootstrapMessage(refreshed.bootstrapMessage ?? null);
+          setCanLateOverride(refreshed.canLateOverride ?? false);
+          setOverrideMessage(refreshed.overrideMessage ?? null);
           setClosedMessage(refreshed.closedMessage ?? null);
           setDeadline(refreshed.deadline);
+          setDisplayMode(refreshed.displayMode);
         }
       }
 
@@ -256,32 +243,15 @@ export function AvailabilityPageClient() {
         </p>
         {canSaveRegular && (
           <p className="mt-1 text-sm text-gray-600">
-            Submit by{" "}
-            {formatSubmissionSundayLabel(deadline!.submissionSunday)} at 6 PM ET
-            {deadline?.lateStatus === "late_warning" ? " (late — grace period)" : ""}
-            {deadline?.lateStatus === "late_accepted" ? " (just past deadline)" : ""}.
+            Submit every Sunday by{" "}
+            {formatSubmissionSundayLabel(deadline!.submissionSunday)} at 6 PM ET.
           </p>
         )}
       </div>
 
-      {deadline?.lateStatus === "late_warning" && canSaveRegular && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          You are more than 1 hour past the Sunday 6 PM ET deadline. Your
-          submission will be accepted, but late availability may not be fully
-          considered.
-        </div>
-      )}
-
-      {deadline?.lateStatus === "late_accepted" && canSaveRegular && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          You are just past the 6 PM ET deadline. Your submission will still be
-          accepted.
-        </div>
-      )}
-
-      {bootstrapMessage && canSaveBootstrap && (
+      {overrideMessage && canSaveOverride && (
         <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
-          {bootstrapMessage}
+          {overrideMessage}
         </div>
       )}
 
@@ -306,12 +276,11 @@ export function AvailabilityPageClient() {
 
       <ul className="space-y-3">
         {days.map((day) => {
-          const isBootstrapDay = canSaveBootstrap && bootstrapDateSet.has(day.date);
           const canEditDayPreferences =
-            canSavePreferences && day.isAvailable && !canSaveRegular && !canSaveBootstrap;
-          const canEditAvailable = canSaveRegular || isBootstrapDay;
+            canSavePreferences && day.isAvailable && !canSaveRegular && !canSaveOverride;
+          const canEditAvailable = canSaveRegular || canSaveOverride;
           const canEditPoolToggles =
-            canSaveRegular || isBootstrapDay || canEditDayPreferences;
+            canSaveRegular || canSaveOverride || canEditDayPreferences;
 
           return (
             <li
@@ -426,8 +395,8 @@ export function AvailabilityPageClient() {
         >
           {saving
             ? "Saving…"
-            : canSaveBootstrap
-              ? "Save remaining days"
+            : canSaveOverride
+              ? "Save catch-up availability"
               : canSaveRegular
                 ? "Save availability"
                 : "Save preferences"}

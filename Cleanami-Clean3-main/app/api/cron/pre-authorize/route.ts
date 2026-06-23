@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { jobs, properties, subscriptions, customers } from "@/db/schemas";
-import { eq, and, isNull, gte, lt } from "drizzle-orm";
+import { eq, and, isNull, gte, lt, ne } from "drizzle-orm";
 import { PricingService } from "@/lib/services/pricing.service";
 import { getStripe } from "@/lib/stripe/get-stripe";
 import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
@@ -77,7 +77,9 @@ export async function POST(req: NextRequest) {
           gte(jobs.checkOutTime, tomorrowStart),
           lt(jobs.checkOutTime, dayAfterTomorrowStart),
           isNull(jobs.paymentIntentId),
-          isNull(jobs.paymentStatus)
+          isNull(jobs.paymentStatus),
+          ne(jobs.status, "canceled"),
+          eq(subscriptions.status, "active")
         )
       );
 

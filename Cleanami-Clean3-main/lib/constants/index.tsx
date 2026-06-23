@@ -108,4 +108,9 @@ export const PRIVATE_USER_NAV_ROUTES = [
     label: "subscriptions",
     route: "/customer/subscriptions",
   },
+  {
+    icon: <UserIcon />,
+    label: "account",
+    route: "/customer/profile",
+  },
 ];

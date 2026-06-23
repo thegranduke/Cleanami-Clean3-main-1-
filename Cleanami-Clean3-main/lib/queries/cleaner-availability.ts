@@ -1,20 +1,19 @@
 import "server-only";
 
 import { db } from "@/db";
-import { availability } from "@/db/schemas";
+import { availability, cleaners } from "@/db/schemas";
 import {
   formatDayLabel,
   getAvailabilityWindow,
+  getMissedPeriodForOverride,
   getSubmissionClosedMessage,
-  toSubmissionStatus,
   type AvailabilityDisplayMode,
   type AvailabilityPeriod,
-  type SubmissionLateStatus,
 } from "@/lib/cleaner/availability-deadline";
 import {
   getTodayEtIso,
-  resolveAvailabilityBootstrapState,
-} from "@/lib/cleaner/availability-bootstrap";
+  resolveAvailabilityOverrideState,
+} from "@/lib/cleaner/availability-override";
 import { and, eq, gte, lte } from "drizzle-orm";
 
 export type AvailabilityDayInput = {
@@ -41,21 +40,18 @@ export type AvailabilityDayState = {
 const DEFAULT_START = "08:00:00";
 const DEFAULT_END = "20:00:00";
 
-/** Hide past dates in locked/bootstrap views — only today onward (ET). */
 function filterDaysForDisplay(
   days: AvailabilityDayState[],
   input: {
     displayMode: AvailabilityDisplayMode;
-    canBootstrap: boolean;
-    bootstrapDates: string[];
+    canLateOverride: boolean;
     canSubmitRegular: boolean;
   }
 ): AvailabilityDayState[] {
   const today = getTodayEtIso();
 
-  if (input.canBootstrap) {
-    const allowed = new Set(input.bootstrapDates);
-    return days.filter((day) => allowed.has(day.date));
+  if (input.displayMode === "override") {
+    return days;
   }
 
   if (input.displayMode === "locked" && !input.canSubmitRegular) {
@@ -81,6 +77,20 @@ export async function countCleanerAvailabilityInPeriod(
   return rows.length;
 }
 
+async function getCleanerOverrideTracking(cleanerId: string): Promise<{
+  lateOverridePeriodStart: string | null;
+}> {
+  const cleaner = await db.query.cleaners.findFirst({
+    where: eq(cleaners.id, cleanerId),
+    columns: { availabilityLateOverridePeriodStart: true },
+  });
+
+  return {
+    lateOverridePeriodStart:
+      cleaner?.availabilityLateOverridePeriodStart ?? null,
+  };
+}
+
 export async function getCleanerAvailability(
   cleanerId: string
 ): Promise<{
@@ -89,11 +99,35 @@ export async function getCleanerAvailability(
   deadline: ReturnType<typeof getAvailabilityWindow>["deadline"];
   displayMode: AvailabilityDisplayMode;
   closedMessage: string | null;
-  canBootstrap: boolean;
-  bootstrapDates: string[];
-  bootstrapMessage: string | null;
+  canLateOverride: boolean;
+  overrideMessage: string | null;
 }> {
-  const { period, deadline, displayMode } = getAvailabilityWindow();
+  const baseWindow = getAvailabilityWindow();
+  const { lateOverridePeriodStart } = await getCleanerOverrideTracking(cleanerId);
+  const missedPeriod = getMissedPeriodForOverride();
+
+  const missedRowCount = missedPeriod
+    ? await countCleanerAvailabilityInPeriod(cleanerId, missedPeriod)
+    : 0;
+
+  const override = resolveAvailabilityOverrideState({
+    lateOverridePeriodStart,
+    existingRowCountForMissedPeriod: missedRowCount,
+  });
+
+  let period = baseWindow.period;
+  let displayMode = baseWindow.displayMode;
+  let deadline = baseWindow.deadline;
+
+  if (override.canLateOverride && override.overridePeriod) {
+    period = override.overridePeriod;
+    displayMode = "override";
+    deadline = {
+      ...baseWindow.deadline,
+      canSubmitRegular: false,
+      canEditPreferences: false,
+    };
+  }
 
   const rows = await db.query.availability.findMany({
     where: and(
@@ -103,17 +137,12 @@ export async function getCleanerAvailability(
     ),
   });
 
-  const bootstrap = resolveAvailabilityBootstrapState({
-    displayMode,
-    period,
-    existingRowCount: rows.length,
-  });
-
-  const closedMessage = bootstrap.canBootstrap
-    ? null
-    : deadline.canSubmitRegular
+  const closedMessage =
+    override.canLateOverride
       ? null
-      : getSubmissionClosedMessage(deadline, period, displayMode);
+      : deadline.canSubmitRegular
+        ? null
+        : getSubmissionClosedMessage(deadline, period, displayMode);
 
   const byDate = new Map(
     rows.map((row) => [
@@ -139,8 +168,7 @@ export async function getCleanerAvailability(
 
   const days = filterDaysForDisplay(allDays, {
     displayMode,
-    canBootstrap: bootstrap.canBootstrap,
-    bootstrapDates: bootstrap.bootstrapDates,
+    canLateOverride: override.canLateOverride,
     canSubmitRegular: deadline.canSubmitRegular,
   });
 
@@ -150,22 +178,17 @@ export async function getCleanerAvailability(
     deadline,
     displayMode,
     closedMessage,
-    canBootstrap: bootstrap.canBootstrap,
-    bootstrapDates: bootstrap.bootstrapDates,
-    bootstrapMessage: bootstrap.bootstrapMessage,
+    canLateOverride: override.canLateOverride,
+    overrideMessage: override.overrideMessage,
   };
 }
 
 export async function saveCleanerAvailability(
   cleanerId: string,
-  days: AvailabilityDayInput[],
-  lateStatus: SubmissionLateStatus
+  days: AvailabilityDayInput[]
 ): Promise<{ period: AvailabilityPeriod }> {
   const { period } = getAvailabilityWindow();
   const now = new Date();
-  const submissionStatus = toSubmissionStatus(lateStatus);
-  const isGracePeriod =
-    lateStatus === "late_accepted" || lateStatus === "late_warning";
 
   for (const day of days) {
     await db
@@ -186,8 +209,8 @@ export async function saveCleanerAvailability(
         endTime: DEFAULT_END,
         onCallEligible: day.onCallEligible,
         openPoolEligible: day.openPoolEligible ?? false,
-        isGracePeriod,
-        submissionStatus,
+        isGracePeriod: false,
+        submissionStatus: "on_time",
         submittedAt: now,
       });
     }
@@ -220,10 +243,6 @@ export async function saveCleanerAvailabilityPreferences(
       );
     }
 
-    if (!pref.onCallEligible && !pref.openPoolEligible) {
-      // Still allow turning both off while keeping the day available
-    }
-
     await db
       .update(availability)
       .set({
@@ -242,17 +261,15 @@ export async function saveCleanerAvailabilityPreferences(
   return { period };
 }
 
-export async function saveCleanerBootstrapAvailability(
+export async function saveCleanerLateOverrideAvailability(
   cleanerId: string,
   days: AvailabilityDayInput[],
-  bootstrapDates: string[]
+  period: AvailabilityPeriod
 ): Promise<{ period: AvailabilityPeriod }> {
-  const { period } = getAvailabilityWindow();
-  const allowed = new Set(bootstrapDates);
   const now = new Date();
 
   for (const day of days) {
-    if (!allowed.has(day.date)) {
+    if (!period.dates.includes(day.date)) {
       continue;
     }
 
@@ -280,6 +297,14 @@ export async function saveCleanerBootstrapAvailability(
       });
     }
   }
+
+  await db
+    .update(cleaners)
+    .set({
+      availabilityLateOverridePeriodStart: period.start,
+      updatedAt: new Date(),
+    })
+    .where(eq(cleaners.id, cleanerId));
 
   return { period };
 }

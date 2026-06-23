@@ -2,7 +2,8 @@ import "server-only";
 
 import { db } from "@/db";
 import { jobs, jobsToCleaners, properties, cleaners } from "@/db/schemas";
-import { and, eq, gte, ne, inArray, asc } from "drizzle-orm";
+import { and, eq, gte, lte, ne, inArray, asc } from "drizzle-orm";
+import { getCleanerJobWindowEnd } from "@/lib/cleaner/planning-window";
 
 export type CleanerJobRole =
   | "primary"
@@ -73,6 +74,7 @@ export async function getCleanerUpcomingJobs(
 ): Promise<CleanerJobSummary[]> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const windowEnd = getCleanerJobWindowEnd();
 
   const assignments = await db
     .select({
@@ -92,6 +94,7 @@ export async function getCleanerUpcomingJobs(
       and(
         eq(jobsToCleaners.cleanerId, cleanerId),
         gte(jobs.checkInTime, today),
+        lte(jobs.checkInTime, windowEnd),
         ne(jobs.status, "canceled")
       )
     )
