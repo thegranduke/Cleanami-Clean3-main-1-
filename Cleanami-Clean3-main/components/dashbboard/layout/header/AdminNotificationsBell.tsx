@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Bell, Loader2, X } from "lucide-react";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
 
 type Notification = {
@@ -15,6 +16,10 @@ type Notification = {
 };
 
 export function AdminNotificationsBell() {
+  const { data: user } = useCurrentUser();
+  const userRole = user?.user_metadata?.role as string | undefined;
+  const isAdmin = userRole === "admin" || userRole === "super_admin";
+
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -52,10 +57,16 @@ export function AdminNotificationsBell() {
   }, []);
 
   useEffect(() => {
+    if (!isAdmin) return;
+
     loadNotifications(false);
     const interval = setInterval(() => loadNotifications(true), 60_000);
     return () => clearInterval(interval);
-  }, [loadNotifications]);
+  }, [isAdmin, loadNotifications]);
+
+  if (!isAdmin) {
+    return null;
+  }
 
   async function handleMarkAllRead() {
     await fetch("/api/notifications", { method: "PATCH" });

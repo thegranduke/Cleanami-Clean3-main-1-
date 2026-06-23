@@ -52,14 +52,20 @@ export async function getCleanerAuth(): Promise<CleanerAuthResult> {
 
     const cleaner = await database.query.cleaners.findFirst({
       where: eq(cleaners.userId, dbUser.id),
-      columns: { id: true, invitationId: true },
+      columns: {
+        id: true,
+        invitationId: true,
+        onboardingCompleted: true,
+      },
     });
 
     if (!cleaner) {
       return { cleanerId: null, error: PROFILE_NOT_FOUND_MESSAGE };
     }
 
-    if (!cleaner.invitationId) {
+    // New signups must come through an approved invitation. Legacy cleaners who
+    // finished onboarding before invitation tracking may not have invitation_id.
+    if (!cleaner.invitationId && !cleaner.onboardingCompleted) {
       return { cleanerId: null, error: INVITATION_REQUIRED_MESSAGE };
     }
 
