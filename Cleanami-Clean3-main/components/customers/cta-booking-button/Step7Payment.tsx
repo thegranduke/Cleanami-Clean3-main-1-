@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import { toast } from 'sonner';
 import { PriceDetails, SignupFormData } from '@/lib/validations/bookng-modal';
-import { createValidatedPaymentIntent } from '@/lib/actions/payment.actions';
+import { serializeSignupFormDataForServer } from '@/lib/validations/bookng-modal/serialize-signup-form';
 import { CheckoutForm } from './CheckoutForm';
 import { FounderCard } from '../../FounderCard';
 import { ShieldCheck, Lock } from 'lucide-react';
@@ -27,26 +27,82 @@ export const Step7Payment = ({
 }: Props) => {
   const [clientSecret, setClientSecret] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
 
-  useEffect(() => {
-    if (!priceDetails || priceDetails.totalPerClean <= 0) return;
+  const serializedFormData = useMemo(
+    () => serializeSignupFormDataForServer(formData),
+    [formData]
+  );
+
+  const paymentRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        formData: serializedFormData,
+        amount: priceDetails?.totalPerClean ?? 0,
+      }),
+    [serializedFormData, priceDetails?.totalPerClean]
+  );
+
+  const initializePayment = useCallback(async () => {
+    if (!priceDetails || priceDetails.totalPerClean <= 0) {
+      return;
+    }
+
+    setIsInitializing(true);
+    setError(null);
+    setClientSecret('');
 
     const amountInCents = Math.round(priceDetails.totalPerClean * 100);
 
-    createValidatedPaymentIntent(formData, amountInCents)
-      .then(result => {
-        if (result.error) {
-          setError(result.error);
-          if (isServiceUnavailableMessage(result.error)) {
-            toast.error(result.error);
-          }
-        } else if (result.clientSecret) {
-          setClientSecret(result.clientSecret);
-          setError(null);
-        }
+    try {
+      const response = await fetch('/api/payment/create-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formData: serializedFormData,
+          clientSideAmount: amountInCents,
+        }),
       });
-  }, [priceDetails, formData]);
+
+      const result = (await response.json()) as {
+        clientSecret?: string;
+        error?: string;
+      };
+
+      if (!response.ok || result.error) {
+        const message =
+          result.error ??
+          'Could not initialize payment. Please refresh and try again.';
+        setError(message);
+        if (isServiceUnavailableMessage(message)) {
+          toast.error(message);
+        }
+        return;
+      }
+
+      if (result.clientSecret) {
+        setClientSecret(result.clientSecret);
+      } else {
+        setError('Could not initialize payment. Please refresh and try again.');
+      }
+    } catch (initError) {
+      console.error('Payment initialization failed:', initError);
+      setError(
+        'Could not reach the payment service. Check your connection and try again.'
+      );
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [priceDetails, serializedFormData]);
+
+  useEffect(() => {
+    if (!showPaymentForm && onBookCall) {
+      return;
+    }
+
+    void initializePayment();
+  }, [paymentRequestKey, showPaymentForm, onBookCall, initializePayment]);
 
   const appearance = { theme: 'stripe' as const, variables: { colorPrimary: '#14b8a6' } };
   const options: StripeElementsOptions = { clientSecret, appearance };
@@ -64,7 +120,6 @@ export const Step7Payment = ({
         </p>
       </div>
 
-      {/* Reassurance text ABOVE Founder Card - per spec */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
         <ShieldCheck className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-amber-800 font-medium">
@@ -72,7 +127,6 @@ export const Step7Payment = ({
         </p>
       </div>
 
-      {/* Founder Card - CALL DECISION POINT E (ABOVE payment fields) - per spec */}
       {!showPaymentForm && onBookCall && (
         <FounderCard
           onBookCall={onBookCall}
@@ -80,12 +134,21 @@ export const Step7Payment = ({
         />
       )}
 
-      {/* Payment Form - shown after user dismisses Founder Card or clicks continue */}
       {(showPaymentForm || !onBookCall) && (
         <>
           {error && (
-            <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-md text-sm">
-              {error}
+            <div className="space-y-3">
+              <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-md text-sm">
+                {error}
+              </div>
+              <button
+                type="button"
+                onClick={() => void initializePayment()}
+                disabled={isInitializing}
+                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {isInitializing ? 'Retrying…' : 'Try again'}
+              </button>
             </div>
           )}
 
@@ -94,12 +157,14 @@ export const Step7Payment = ({
               <CheckoutForm onPaymentSuccess={onPaymentSuccess} />
             </Elements>
           ) : (
-            <div className="h-48 flex items-center justify-center">
-              {!error && <div className="spinner" />}
-            </div>
+            !error && (
+              <div className="h-48 flex flex-col items-center justify-center gap-3">
+                <div className="spinner" />
+                <p className="text-sm text-gray-500">Preparing secure checkout…</p>
+              </div>
+            )
           )}
 
-          {/* Reassurance text BELOW payment section - per spec */}
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-start gap-3">
             <Lock className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" />
             <div>
