@@ -24,7 +24,6 @@ export const Step7Payment = ({
   formData, 
   onPaymentSuccess,
   onBookCall,
-  onContinueSetup,
 }: Props) => {
   const [clientSecret, setClientSecret] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +53,6 @@ export const Step7Payment = ({
 
   const handleContinueToPayment = () => {
     setShowPaymentForm(true);
-    onContinueSetup?.();
   };
 
   return (
@@ -109,7 +107,8 @@ export const Step7Payment = ({
                 Payments are processed securely via Stripe.
               </p>
               <p className="text-sm text-gray-600 mt-1">
-                We only charge after a clean is completed and verified.
+                Your first clean is charged now. Later cleans are authorized the
+                night before and captured only after the job is completed.
               </p>
             </div>
           </div>

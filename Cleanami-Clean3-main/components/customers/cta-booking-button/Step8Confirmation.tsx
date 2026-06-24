@@ -28,17 +28,24 @@ export const Step8Confirmation = ({
         <CheckCircle className="h-12 w-12 text-green-600" />
       </div>
       <h2 className="mt-6 text-2xl font-bold text-gray-800">Setup Complete!</h2>
-      <p className="mt-2 text-gray-600 max-w-md mx-auto">
-        Congratulations! Your subscription is active and your first cleaning is
-        prepaid.
-      </p>
+      {paymentIntentId ? (
+        <p className="mt-2 text-gray-600 max-w-md mx-auto">
+          Congratulations! Your subscription is active and your first cleaning is
+          prepaid.
+        </p>
+      ) : (
+        <p className="mt-2 text-gray-600 max-w-md mx-auto">
+          Your booking details were saved, but payment was not completed. Please
+          go back and finish payment to activate your subscription.
+        </p>
+      )}
 
-      {portalInviteEmailSent ? (
+      {paymentIntentId && portalInviteEmailSent ? (
         <p className="mt-6 text-sm text-gray-600 max-w-md mx-auto">
           Check your email for a link to sign in to your customer portal. You can
           set a password or use the magic link we sent.
         </p>
-      ) : (
+      ) : paymentIntentId ? (
         <p className="mt-6 text-sm text-gray-600 max-w-md mx-auto">
           Your portal is ready. Sign in at{" "}
           <Link href="/sign-in" className="font-semibold text-brand">
@@ -47,7 +54,7 @@ export const Step8Confirmation = ({
           with the email you used for booking, or contact support if you need a
           new login link.
         </p>
-      )}
+      ) : null}
 
       <Link
         href="/sign-in"
