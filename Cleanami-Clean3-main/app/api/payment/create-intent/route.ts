@@ -8,7 +8,6 @@ import {
 
 const bodySchema = z.object({
   formData: z.record(z.string(), z.unknown()),
-  clientSideAmount: z.number().int().positive(),
 });
 
 export async function POST(request: NextRequest) {
@@ -27,16 +26,16 @@ export async function POST(request: NextRequest) {
       parsed.data.formData as SerializableSignupFormData
     );
 
-    const result = await createPaymentIntentForSignup(
-      formData,
-      parsed.data.clientSideAmount
-    );
+    const result = await createPaymentIntentForSignup(formData);
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ clientSecret: result.clientSecret });
+    return NextResponse.json({
+      clientSecret: result.clientSecret,
+      amountInCents: result.amountInCents,
+    });
   } catch (error) {
     console.error("[POST /api/payment/create-intent]", error);
     return NextResponse.json(

@@ -7,8 +7,16 @@ export function getStripe(): Stripe | null {
     return stripeClient;
   }
 
-  const key =
-    process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY;
+  const key = (() => {
+    const mode = process.env.STRIPE_MODE;
+    if (mode === "test") {
+      return process.env.STRIPE_SECRET_KEY;
+    }
+    if (mode === "live") {
+      return process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY;
+    }
+    return process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY;
+  })();
 
   if (!key) {
     stripeClient = null;

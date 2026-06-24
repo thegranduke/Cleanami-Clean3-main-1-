@@ -2,6 +2,7 @@ import "server-only";
 
 import { PricingService } from "@/lib/services/pricing.service";
 import { SignupFormData } from "@/lib/validations/bookng-modal";
+import { normalizeSignupFormDataForPricing } from "@/lib/validations/bookng-modal/serialize-signup-form";
 import { customers } from "@/db/schemas";
 import { getDbOrNull } from "@/db";
 import { eq } from "drizzle-orm";
@@ -11,10 +12,59 @@ import Stripe from "stripe";
 
 const pricingService = new PricingService();
 
-export async function createPaymentIntentForSignup(
+async function resolveStripeCustomer(
+  stripe: Stripe,
   formData: SignupFormData,
-  clientSideAmount: number
-): Promise<{ clientSecret?: string; error?: string }> {
+  storedStripeCustomerId: string | null
+): Promise<Stripe.Customer> {
+  const profile = {
+    name: formData.name,
+    phone: formData.phoneNumber,
+  };
+
+  if (storedStripeCustomerId) {
+    try {
+      const existing = await stripe.customers.retrieve(storedStripeCustomerId);
+      if (!("deleted" in existing && existing.deleted)) {
+        await stripe.customers.update(existing.id, profile);
+        return existing as Stripe.Customer;
+      }
+    } catch (error) {
+      console.warn(
+        "[createPaymentIntentForSignup] Stored Stripe customer invalid, recovering:",
+        storedStripeCustomerId,
+        error
+      );
+    }
+  }
+
+  if (formData.email) {
+    const existingStripeCustomers = await stripe.customers.list({
+      email: formData.email,
+      limit: 1,
+    });
+
+    if (existingStripeCustomers.data.length > 0) {
+      const stripeCustomer = existingStripeCustomers.data[0];
+      await stripe.customers.update(stripeCustomer.id, profile);
+      return stripeCustomer;
+    }
+  }
+
+  return stripe.customers.create({
+    email: formData.email,
+    name: formData.name,
+    phone: formData.phoneNumber,
+  });
+}
+
+export async function createPaymentIntentForSignup(
+  formData: SignupFormData
+): Promise<{
+  clientSecret?: string;
+  amountInCents?: number;
+  error?: string;
+}> {
   const stripe = getStripe();
   if (!stripe) {
     return { error: SERVICE_UNAVAILABLE.stripe };
@@ -25,25 +75,31 @@ export async function createPaymentIntentForSignup(
     return { error: SERVICE_UNAVAILABLE.database };
   }
 
-  const serverPriceDetails = await pricingService.calculatePrice(formData);
-  const serverAmountInCents = Math.round(serverPriceDetails.totalPerClean * 100);
+  const normalizedFormData = normalizeSignupFormDataForPricing(formData);
+  const serverPriceDetails =
+    await pricingService.calculatePrice(normalizedFormData);
 
-  if (serverAmountInCents !== clientSideAmount) {
-    console.error(
-      `SECURITY ALERT: Price mismatch. Client: ${clientSideAmount}, Server: ${serverAmountInCents}`
-    );
-    return { error: "Price validation failed. Please refresh and try again." };
+  if (serverPriceDetails.isCustomQuote) {
+    return {
+      error:
+        "Properties over 3,000 sq ft require a custom quote. Please book a setup call or contact CleanNami.",
+    };
   }
 
+  const serverAmountInCents = Math.round(serverPriceDetails.totalPerClean * 100);
+
   if (serverAmountInCents <= 0) {
-    return { error: "Invalid amount for payment." };
+    return {
+      error:
+        "We could not calculate a price for this property. Please check your property details and try again.",
+    };
   }
 
   let stripeCustomerId: string | null = null;
 
-  if (formData.email) {
+  if (normalizedFormData.email) {
     const existingCustomer = await db.query.customers.findFirst({
-      where: eq(customers.email, formData.email),
+      where: eq(customers.email, normalizedFormData.email),
       columns: { stripeCustomerId: true },
     });
 
@@ -52,49 +108,22 @@ export async function createPaymentIntentForSignup(
     }
   }
 
-  let stripeCustomer: Stripe.Customer;
-
-  if (stripeCustomerId) {
-    stripeCustomer = (await stripe.customers.retrieve(
-      stripeCustomerId
-    )) as Stripe.Customer;
-
-    await stripe.customers.update(stripeCustomer.id, {
-      name: formData.name,
-      phone: formData.phoneNumber,
-    });
-  } else {
-    const existingStripeCustomers = await stripe.customers.list({
-      email: formData.email,
-      limit: 1,
-    });
-
-    if (existingStripeCustomers.data.length > 0) {
-      stripeCustomer = existingStripeCustomers.data[0];
-
-      await stripe.customers.update(stripeCustomer.id, {
-        name: formData.name,
-        phone: formData.phoneNumber,
-      });
-    } else {
-      stripeCustomer = await stripe.customers.create({
-        email: formData.email,
-        name: formData.name,
-        phone: formData.phoneNumber,
-      });
-    }
-  }
+  const stripeCustomer = await resolveStripeCustomer(
+    stripe,
+    normalizedFormData,
+    stripeCustomerId
+  );
 
   const metadata: Stripe.MetadataParam = {
-    customer_name: formData.name ?? "N/A",
-    customer_email: formData.email ?? "N/A",
-    property_address: formData.address ?? "N/A",
-    property_details: `${formData.bedrooms} bed, ${formData.bathrooms} bath, ${formData.sqft ?? "N/A"} sqft`,
-    laundry_service: `${formData.laundryService} (${formData.laundryLoads ?? 0} loads)`,
-    hot_tub_service: (formData.hasHotTub && "has hot tub") || "",
-    hot_tub_drain: (formData.hotTubDrain && "drain hot tub") || "",
-    hotTub_drain_cadence: formData.hotTubDrainCadence || "",
-    subscription_term: `${formData.subscriptionMonths} month(s)`,
+    customer_name: normalizedFormData.name ?? "N/A",
+    customer_email: normalizedFormData.email ?? "N/A",
+    property_address: normalizedFormData.address ?? "N/A",
+    property_details: `${normalizedFormData.bedrooms} bed, ${normalizedFormData.bathrooms} bath, ${normalizedFormData.sqft ?? "N/A"} sqft`,
+    laundry_service: `${normalizedFormData.laundryService} (${normalizedFormData.laundryLoads ?? 0} loads)`,
+    hot_tub_service: (normalizedFormData.hasHotTub && "has hot tub") || "",
+    hot_tub_drain: (normalizedFormData.hotTubDrain && "drain hot tub") || "",
+    hotTub_drain_cadence: normalizedFormData.hotTubDrainCadence || "",
+    subscription_term: `${normalizedFormData.subscriptionMonths} month(s)`,
   };
 
   const paymentIntent = await stripe.paymentIntents.create({
@@ -112,5 +141,8 @@ export async function createPaymentIntentForSignup(
     return { error: "Could not initialize payment. Please contact support." };
   }
 
-  return { clientSecret: paymentIntent.client_secret };
+  return {
+    clientSecret: paymentIntent.client_secret,
+    amountInCents: serverAmountInCents,
+  };
 }

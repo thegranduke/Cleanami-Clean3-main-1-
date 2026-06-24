@@ -1,8 +1,10 @@
 import { db } from "@/db";
 import { PriceDetails, SignupFormData } from "@/lib/validations/bookng-modal";
+import { normalizeSignupFormDataForPricing } from "@/lib/validations/bookng-modal/serialize-signup-form";
 
 export class PricingService {
   public async calculatePrice(formData: SignupFormData): Promise<PriceDetails> {
+    const normalized = normalizeSignupFormDataForPricing(formData);
     const [basePrices, sqftSurcharges, laundryRules, hotTubRules] =
       await Promise.all([
         db.query.basePricingRules.findMany(),
@@ -12,7 +14,7 @@ export class PricingService {
       ]);
 
     const rules = { basePrices, sqftSurcharges, laundryRules, hotTubRules };
-    const { bedrooms = 0, bathrooms = 0, sqft = 0 } = formData;
+    const { bedrooms = 0, bathrooms = 0, sqft = 0 } = normalized;
 
     const basePrice = this._calculateBasePrice(
       bedrooms,
@@ -24,10 +26,10 @@ export class PricingService {
       rules.sqftSurcharges
     );
     const laundryCost = this._calculateLaundryCost(
-      formData,
+      normalized,
       rules.laundryRules
     );
-    const hotTubCost = this._calculateHotTubCost(formData, rules.hotTubRules);
+    const hotTubCost = this._calculateHotTubCost(normalized, rules.hotTubRules);
 
     const customQuoteRule = rules.sqftSurcharges.find(
       (r: any) => r.isCustomQuote

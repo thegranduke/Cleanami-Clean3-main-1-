@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
+import { StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import { toast } from 'sonner';
 import { PriceDetails, SignupFormData } from '@/lib/validations/bookng-modal';
@@ -8,8 +8,9 @@ import { CheckoutForm } from './CheckoutForm';
 import { FounderCard } from '../../FounderCard';
 import { ShieldCheck, Lock } from 'lucide-react';
 import { isServiceUnavailableMessage } from '@/lib/env/messages';
+import { getStripe } from '@/lib/stripe/client';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
+const stripePromise = getStripe();
 
 interface Props {
   priceDetails: PriceDetails | null;
@@ -53,20 +54,18 @@ export const Step7Payment = ({
     setError(null);
     setClientSecret('');
 
-    const amountInCents = Math.round(priceDetails.totalPerClean * 100);
-
     try {
       const response = await fetch('/api/payment/create-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           formData: serializedFormData,
-          clientSideAmount: amountInCents,
         }),
       });
 
       const result = (await response.json()) as {
         clientSecret?: string;
+        amountInCents?: number;
         error?: string;
       };
 

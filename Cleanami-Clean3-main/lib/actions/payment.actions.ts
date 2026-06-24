@@ -9,8 +9,7 @@ import {
 } from '../validations/bookng-modal/serialize-signup-form';
 
 export async function createValidatedPaymentIntent(
-  formData: SignupFormData | SerializableSignupFormData,
-  clientSideAmount: number
+  formData: SignupFormData | SerializableSignupFormData
 ): Promise<{ clientSecret?: string | null; error?: string }> {
   try {
     const normalized =
@@ -22,7 +21,11 @@ export async function createValidatedPaymentIntent(
             formData as SerializableSignupFormData
           );
 
-    return await createPaymentIntentForSignup(normalized, clientSideAmount);
+    const result = await createPaymentIntentForSignup(normalized);
+    return {
+      clientSecret: result.clientSecret ?? null,
+      error: result.error,
+    };
   } catch (error) {
     console.error("Error creating Payment Intent:", error);
     return { error: 'Could not initialize payment. Please contact support.' };
