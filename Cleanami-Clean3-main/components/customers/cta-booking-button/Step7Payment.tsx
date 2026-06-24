@@ -18,6 +18,7 @@ interface Props {
   onPaymentSuccess: (paymentIntentId: string) => void;
   onBookCall?: () => void;
   onContinueSetup?: () => void;
+  paymentFinalizing?: boolean;
 }
 
 export const Step7Payment = ({ 
@@ -25,6 +26,7 @@ export const Step7Payment = ({
   formData, 
   onPaymentSuccess,
   onBookCall,
+  paymentFinalizing = false,
 }: Props) => {
   const [clientSecret, setClientSecret] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -96,12 +98,23 @@ export const Step7Payment = ({
   }, [priceDetails, serializedFormData]);
 
   useEffect(() => {
+    if (paymentFinalizing || clientSecret) {
+      return;
+    }
+
     if (!showPaymentForm && onBookCall) {
       return;
     }
 
     void initializePayment();
-  }, [paymentRequestKey, showPaymentForm, onBookCall, initializePayment]);
+  }, [
+    paymentRequestKey,
+    showPaymentForm,
+    onBookCall,
+    initializePayment,
+    paymentFinalizing,
+    clientSecret,
+  ]);
 
   const appearance = { theme: 'stripe' as const, variables: { colorPrimary: '#14b8a6' } };
   const options: StripeElementsOptions = { clientSecret, appearance };

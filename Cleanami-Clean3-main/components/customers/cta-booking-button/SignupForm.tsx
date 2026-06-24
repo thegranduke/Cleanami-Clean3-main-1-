@@ -17,17 +17,17 @@ import { Step8Confirmation } from "./Step8Confirmation";
 import { ModalLayout } from "./ModalLayout";
 import { ProgressBar } from "./ProgressBar";
 import { PriceSummary } from "./PriceSummary";
-import { completeOnboarding } from "@/lib/actions/onboarding.actions";
+import { completeSession } from "@/lib/actions/session.actions";
+import { handleCallBooked } from "@/lib/actions/booking.actions";
 import { cn } from "@/lib/utils";
 import { getLivePrice } from "@/lib/actions/clientSidePricing.actions";
 import { toast } from "sonner";
 import { isServiceUnavailableMessage } from "@/lib/env/messages";
+import { serializeSignupFormDataForServer } from "@/lib/validations/bookng-modal/serialize-signup-form";
 
 // Session persistence
 import { useSessionPersistence } from "@/hooks/useSessionPersistence";
 import { ResumeSessionPrompt } from "../ResumeSessionPrompt";
-import { completeSession } from "@/lib/actions/session.actions";
-import { handleCallBooked } from "@/lib/actions/booking.actions";
 import { Loader } from "lucide-react";
 import { CallBookedConfirmation } from "@/components/CallBookedConfirmation";
 
@@ -247,25 +247,53 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
     setIsSaving(true);
     setSaveError(null);
 
-    const result = await completeOnboarding(formData, paymentIntentId);
-
-    if (result.success) {
-      setPortalInviteEmailSent(
-        result.data?.portalInviteEmailSent !== false
+    try {
+      const body = new FormData();
+      body.append("paymentIntentId", paymentIntentId);
+      body.append(
+        "formData",
+        JSON.stringify(serializeSignupFormDataForServer(formData))
       );
-      await completeSession();
-      setCurrentStep(TOTAL_STEPS);
-    } else {
+
+      if (formData.checklistFile?.length) {
+        for (const file of formData.checklistFile) {
+          body.append("checklistFiles", file);
+        }
+      }
+
+      const response = await fetch("/api/customer/onboarding/complete", {
+        method: "POST",
+        body,
+      });
+
+      const result = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+        data?: { portalInviteEmailSent?: boolean };
+      };
+
+      if (response.ok && result.success) {
+        setPortalInviteEmailSent(result.data?.portalInviteEmailSent !== false);
+        await completeSession();
+        setCurrentStep(TOTAL_STEPS);
+        return;
+      }
+
       if (result.error && isServiceUnavailableMessage(result.error)) {
         toast.error(result.error);
       }
-      const errorMessage = `Your payment was successful, but there was an issue finalizing your subscription. 
-                Our team has been notified. For your records, your transaction ID is: ${paymentIntentId}. 
-                Please contact support if you have any questions.`;
-      setSaveError(errorMessage);
-    }
 
-    setIsSaving(false);
+      setSaveError(
+        `Your payment was successful, but there was an issue finalizing your subscription. Our team has been notified. For your records, your transaction ID is: ${paymentIntentId}. Please contact support if you have any questions.`
+      );
+    } catch (error) {
+      console.error("Onboarding finalize failed:", error);
+      setSaveError(
+        `Your payment was successful, but we could not reach the server to finalize your subscription. For your records, your transaction ID is: ${paymentIntentId}. Please contact support.`
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Render current step
@@ -337,6 +365,7 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
               priceDetails={priceDetails}
               formData={formData}
               onPaymentSuccess={handlePaymentSuccess}
+              paymentFinalizing={isSaving}
               {...founderCardProps}
             />
             {isSaving && (
