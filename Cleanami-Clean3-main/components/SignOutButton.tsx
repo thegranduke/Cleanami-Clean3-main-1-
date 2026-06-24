@@ -1,13 +1,17 @@
-import { signOut } from "@/lib/actions/auth.actions";
-import Form from "next/form";
+"use client";
 
-export const SignOutButton = () => {
+import { useSignOut } from "@/hooks/useSignOut";
+
+export function SignOutButton() {
+  const signOut = useSignOut();
 
   return (
-    <Form action={signOut}>
-      <button className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-        Sign Out
-      </button>
-    </Form>
+    <button
+      type="button"
+      onClick={() => signOut()}
+      className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+    >
+      Sign Out
+    </button>
   );
-};
+}

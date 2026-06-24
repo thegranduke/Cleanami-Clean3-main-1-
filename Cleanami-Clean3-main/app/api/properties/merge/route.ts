@@ -14,8 +14,18 @@ export async function POST(request: NextRequest) {
     const parsed = mergePropertiesSchema.safeParse(body);
 
     if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0];
+      const isPropertyIdIssue = firstIssue?.path.some((segment) =>
+        String(segment).toLowerCase().includes("property")
+      );
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid request" },
+        {
+          error: isPropertyIdIssue
+            ? "We couldn't match those property records. Choose the property to keep again, or delete the duplicate if it has no cleaning history."
+            : (firstIssue?.message ?? "Invalid request"),
+          code: "INVALID_PROPERTY",
+          canDelete: isPropertyIdIssue,
+        },
         { status: 400 }
       );
     }

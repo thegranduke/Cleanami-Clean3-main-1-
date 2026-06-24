@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+/** Postgres UUID format (less strict than Zod's RFC-only `.uuid()`). */
+export const propertyIdSchema = z
+  .string()
+  .regex(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    "Invalid property record"
+  );
+
 export const adminCustomerUpdateSchema = z
   .object({
     name: z.string().min(1, "Name is required").optional(),
@@ -20,6 +28,10 @@ export const customerSelfUpdateSchema = z
   });
 
 export const mergePropertiesSchema = z.object({
-  sourcePropertyId: z.string().uuid(),
-  targetPropertyId: z.string().uuid(),
+  sourcePropertyId: propertyIdSchema,
+  targetPropertyId: propertyIdSchema,
+});
+
+export const deletePropertyParamsSchema = z.object({
+  propertyId: propertyIdSchema,
 });

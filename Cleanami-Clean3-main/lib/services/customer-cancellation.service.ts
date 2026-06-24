@@ -14,6 +14,7 @@ import {
   canCancelSubscription,
 } from "@/lib/cancellation/rules";
 import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
+import { customerSkipsBilling } from "@/lib/billing/customer-billing";
 import { PricingService } from "@/lib/services/pricing.service";
 import { getStripe } from "@/lib/stripe/get-stripe";
 import { and, eq, gt, inArray, ne } from "drizzle-orm";
@@ -135,7 +136,7 @@ async function chargeCustomerForLateCancel(
   stripeCustomerId: string | null,
   skipPayment: boolean
 ): Promise<boolean> {
-  if (skipPayment) return false;
+  if (skipPayment || customerSkipsBilling({ skipPayment })) return false;
 
   const stripe = getStripe();
   if (!stripe) {

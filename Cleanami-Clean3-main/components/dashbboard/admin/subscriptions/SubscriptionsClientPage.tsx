@@ -32,7 +32,9 @@ export const SubscriptionsPageClient = () => {
   const isCustomerPortal = pathname.startsWith("/customer");
   const queryClient = useQueryClient();
   const [selectedSubscription, setSelectedSubscription] = useState<SubscriptionsWithDetails['data'][number] | null>(null);
-  const [statusFilter, setStatusFilter] = useState<SubscriptionStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<SubscriptionStatus | 'all'>(
+    isCustomerPortal ? 'active' : 'all'
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
 

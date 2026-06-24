@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, Loader2, LogOut, X } from "lucide-react";
 import { toast } from "sonner";
-import { signOut } from "@/lib/actions/auth.actions";
+import { useSignOut } from "@/hooks/useSignOut";
 import { cn } from "@/lib/utils";
 
 type Notification = {
@@ -17,6 +17,7 @@ type Notification = {
 };
 
 export function CleanerHeader() {
+  const signOut = useSignOut();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -129,15 +130,14 @@ export function CleanerHeader() {
             <p className="text-xs text-gray-500">Cleaner Portal</p>
           </div>
           <div className="flex items-center gap-1">
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="rounded-full p-2 text-gray-600 hover:bg-gray-100"
-                aria-label="Sign out"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
-            </form>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="rounded-full p-2 text-gray-600 hover:bg-gray-100"
+              aria-label="Sign out"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
             <button
               type="button"
               onClick={() => {

@@ -20,8 +20,9 @@ function redirectForRole(role: string | undefined) {
 
 export async function signOut() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
-  return redirect("/");
+  await supabase.auth.signOut({ scope: "global" });
+  revalidatePath("/", "layout");
+  return redirect("/sign-in");
 }
 
 export async function signUpUser(

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, Loader } from "lucide-react";
-import { signOut } from "@/lib/actions/auth.actions";
+import { useSignOut } from "@/hooks/useSignOut";
 import { CleanerPageMessage } from "@/components/cleaner/CleanerPageMessage";
 import { parseCleanerApiError } from "@/lib/cleaner/parse-api-error";
 import { getReliabilityColor } from "@/lib/cleaner/reliability";
@@ -37,6 +37,7 @@ const FAQ_ITEMS = [
 ];
 
 export function ProfilePageClient() {
+  const signOut = useSignOut();
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<CleanerProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -325,14 +326,13 @@ export function ProfilePageClient() {
         </div>
       )}
 
-      <form action={signOut}>
-        <button
-          type="submit"
-          className="w-full rounded-xl border border-gray-300 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-        >
-          Sign out
-        </button>
-      </form>
+      <button
+        type="button"
+        onClick={() => signOut()}
+        className="w-full rounded-xl border border-gray-300 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+      >
+        Sign out
+      </button>
     </div>
   );
 }

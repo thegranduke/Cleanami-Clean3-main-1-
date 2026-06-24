@@ -10,6 +10,12 @@ type CustomerPropertiesManagerProps = {
   properties: PropertyRow[];
 };
 
+type MergeFailure = {
+  sourcePropertyId: string;
+  message: string;
+  canDelete: boolean;
+};
+
 export function CustomerPropertiesManager({
   properties = [],
 }: CustomerPropertiesManagerProps) {
@@ -18,6 +24,7 @@ export function CustomerPropertiesManager({
   const [targetId, setTargetId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mergeFailure, setMergeFailure] = useState<MergeFailure | null>(null);
 
   if (properties.length === 0) {
     return <p className="text-sm text-gray-500">No properties found.</p>;
@@ -31,6 +38,7 @@ export function CustomerPropertiesManager({
 
     setSaving(true);
     setError(null);
+    setMergeFailure(null);
 
     try {
       const response = await fetch("/api/properties/merge", {
@@ -42,16 +50,70 @@ export function CustomerPropertiesManager({
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        error?: string;
+        canDelete?: boolean;
+        code?: string;
+      };
+
       if (!response.ok) {
-        throw new Error(data.error ?? "Merge failed");
+        const message =
+          data.error ??
+          "We couldn't merge these properties. Please try again or delete the duplicate instead.";
+        setMergeFailure({
+          sourcePropertyId,
+          message,
+          canDelete: data.canDelete ?? true,
+        });
+        setError(message);
+        return;
+      }
+
+      setMergingId(null);
+      setTargetId("");
+      router.refresh();
+    } catch {
+      const message =
+        "Something went wrong while merging. Check your connection and try again, or delete the duplicate property instead.";
+      setMergeFailure({
+        sourcePropertyId,
+        message,
+        canDelete: true,
+      });
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(propertyId: string, address: string) {
+    const confirmed = window.confirm(
+      `Delete "${address}"?\n\nOnly use this for empty duplicate records with no cleaning history. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError(null);
+    setMergeFailure(null);
+
+    try {
+      const response = await fetch(`/api/properties/${propertyId}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            "This property can't be deleted because it still has jobs or an active subscription. Merge it into the correct address instead."
+        );
       }
 
       setMergingId(null);
       setTargetId("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Merge failed");
+      setError(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setSaving(false);
     }
@@ -61,8 +123,9 @@ export function CustomerPropertiesManager({
     <div className="space-y-3">
       {properties.length > 1 && (
         <p className="text-xs text-gray-500">
-          Duplicate property? Merge the wrong record into the correct one. Job
-          history and subscriptions move to the kept property.
+          Duplicate property? Merge the wrong record into the correct one so job
+          history and subscriptions move over. If the duplicate has no cleaning
+          history, you can delete it instead.
         </p>
       )}
 
@@ -70,6 +133,8 @@ export function CustomerPropertiesManager({
         {properties.map((property) => {
           const otherProperties = properties.filter((p) => p.id !== property.id);
           const isMerging = mergingId === property.id;
+          const failedThisProperty =
+            mergeFailure?.sourcePropertyId === property.id;
 
           return (
             <li
@@ -80,17 +145,28 @@ export function CustomerPropertiesManager({
               <p className="mt-1 text-xs text-gray-500 font-mono">{property.id}</p>
 
               {properties.length > 1 && !isMerging && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMergingId(property.id);
-                    setTargetId("");
-                    setError(null);
-                  }}
-                  className="mt-2 text-xs font-semibold text-teal-700 hover:text-teal-900"
-                >
-                  Merge this duplicate away…
-                </button>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMergingId(property.id);
+                      setTargetId("");
+                      setError(null);
+                      setMergeFailure(null);
+                    }}
+                    className="text-xs font-semibold text-teal-700 hover:text-teal-900"
+                  >
+                    Merge this duplicate away…
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(property.id, property.address)}
+                    disabled={saving}
+                    className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
+                  >
+                    Delete property…
+                  </button>
+                </div>
               )}
 
               {isMerging && (
@@ -126,12 +202,29 @@ export function CustomerPropertiesManager({
                         setMergingId(null);
                         setTargetId("");
                         setError(null);
+                        setMergeFailure(null);
                       }}
                       className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700"
                     >
                       Cancel
                     </button>
                   </div>
+
+                  {failedThisProperty && mergeFailure.canDelete && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      <p>{mergeFailure.message}</p>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() =>
+                          handleDelete(property.id, property.address)
+                        }
+                        className="mt-2 font-semibold text-red-700 hover:text-red-900 disabled:opacity-50"
+                      >
+                        Delete this duplicate instead
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </li>
@@ -139,7 +232,7 @@ export function CustomerPropertiesManager({
         })}
       </ul>
 
-      {error && (
+      {error && !mergeFailure && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>

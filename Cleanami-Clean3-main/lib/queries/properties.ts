@@ -257,3 +257,53 @@ export async function mergeProperties(
     };
   });
 }
+
+export type DeletePropertyResult = {
+  propertyId: string;
+  address: string;
+};
+
+export async function deleteProperty(
+  propertyId: string
+): Promise<DeletePropertyResult> {
+  const property = await db.query.properties.findFirst({
+    where: eq(properties.id, propertyId),
+    columns: { id: true, address: true, customerId: true },
+  });
+
+  if (!property) {
+    throw new Error("Property not found");
+  }
+
+  const linkedJobs = await db.query.jobs.findFirst({
+    where: eq(jobs.propertyId, propertyId),
+    columns: { id: true },
+  });
+
+  if (linkedJobs) {
+    throw new Error(
+      "This property has cleaning history and cannot be deleted. Merge it into the correct address instead."
+    );
+  }
+
+  const activeSubscription = await db.query.subscriptions.findFirst({
+    where: and(
+      eq(subscriptions.propertyId, propertyId),
+      eq(subscriptions.status, "active")
+    ),
+    columns: { id: true },
+  });
+
+  if (activeSubscription) {
+    throw new Error(
+      "This property has an active subscription. Cancel the subscription first, or merge this property into the correct one."
+    );
+  }
+
+  await db.delete(properties).where(eq(properties.id, propertyId));
+
+  return {
+    propertyId,
+    address: property.address,
+  };
+}
