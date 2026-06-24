@@ -1,21 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { toast } from "sonner";
 import { SignupFormData, PriceDetails } from "@/lib/validations/bookng-modal";
-import {
-  createSession,
-  loadSession,
-  saveSessionProgress,
-  clearSession,
-  SessionResponse,
-} from "@/lib/actions/session.actions";
-import { isServiceUnavailableMessage } from "@/lib/env/messages";
+import { serializeSignupFormDataForServer } from "@/lib/validations/bookng-modal/serialize-signup-form";
+
+interface SessionData {
+  success: boolean;
+  sessionId?: string;
+  currentStep?: number;
+  formData?: Partial<SignupFormData>;
+  priceDetails?: PriceDetails | null;
+  error?: string;
+}
 
 interface UseSessionPersistenceOptions {
-  /** Debounce delay for autosave in ms */
   debounceMs?: number;
-  /** Callback when session is loaded with existing data */
   onSessionLoaded?: (data: {
     formData: Partial<SignupFormData>;
     currentStep: number;
@@ -24,30 +23,38 @@ interface UseSessionPersistenceOptions {
 }
 
 interface UseSessionPersistenceReturn {
-  /** Whether we're checking for an existing session */
   isLoadingSession: boolean;
-  /** Whether an existing session was found */
   hasExistingSession: boolean;
-  /** The existing session data (if found) */
-  existingSessionData: SessionResponse | null;
-  /** Accept and load the existing session */
+  existingSessionData: SessionData | null;
   acceptExistingSession: () => void;
-  /** Decline and start fresh */
   startFreshSession: () => Promise<void>;
-  /** Save current progress (debounced) */
   saveProgress: (
     formData: Partial<SignupFormData>,
     currentStep: number,
     priceDetails: PriceDetails | null
   ) => void;
-  /** Force save immediately (non-debounced) */
   saveProgressNow: (
     formData: Partial<SignupFormData>,
     currentStep: number,
     priceDetails: PriceDetails | null
   ) => Promise<void>;
-  /** Session ID for resume links */
   sessionId: string | null;
+}
+
+async function apiSession(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  body?: object
+): Promise<SessionData> {
+  try {
+    const res = await fetch("/api/onboarding/session", {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return (await res.json()) as SessionData;
+  } catch {
+    return { success: false };
+  }
 }
 
 export function useSessionPersistence(
@@ -57,79 +64,80 @@ export function useSessionPersistence(
 
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [hasExistingSession, setHasExistingSession] = useState(false);
-  const [existingSessionData, setExistingSessionData] = useState<SessionResponse | null>(null);
+  const [existingSessionData, setExistingSessionData] =
+    useState<SessionData | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
   const onSessionLoadedRef = useRef(onSessionLoaded);
 
-  // Keep callback ref updated
   useEffect(() => {
     onSessionLoadedRef.current = onSessionLoaded;
   }, [onSessionLoaded]);
 
-  const notifyIfUnavailable = useCallback((error?: string) => {
-    if (error && isServiceUnavailableMessage(error)) {
-      toast.error(error);
-    }
-  }, []);
-
-  // Check for existing session on mount
+  // Load or create session on mount
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
 
-    async function checkSession() {
+    async function init() {
       setIsLoadingSession(true);
-      const result = await loadSession();
+      const loaded = await apiSession("GET");
 
-      if (result.success) {
+      if (loaded.success) {
         setHasExistingSession(true);
-        setExistingSessionData(result);
-        setSessionId(result.sessionId);
+        setExistingSessionData(loaded);
+        setSessionId(loaded.sessionId ?? null);
       } else {
-        // No existing session - create a new one
-        const newSession = await createSession();
-        if (newSession.success) {
-          setSessionId(newSession.sessionId);
-        } else {
-          notifyIfUnavailable(newSession.error);
+        const created = await apiSession("POST");
+        if (created.success) {
+          setSessionId(created.sessionId ?? null);
         }
       }
 
       setIsLoadingSession(false);
     }
 
-    checkSession();
+    init();
   }, []);
 
-  // Accept the existing session and load its data
   const acceptExistingSession = useCallback(() => {
     if (existingSessionData?.success) {
       onSessionLoadedRef.current?.({
-        formData: existingSessionData.formData,
-        currentStep: existingSessionData.currentStep,
-        priceDetails: existingSessionData.priceDetails,
+        formData: existingSessionData.formData ?? {},
+        currentStep: existingSessionData.currentStep ?? 1,
+        priceDetails: existingSessionData.priceDetails ?? null,
       });
-      setHasExistingSession(false); // Dismiss the prompt
+      setHasExistingSession(false);
     }
   }, [existingSessionData]);
 
-  // Clear and start fresh
   const startFreshSession = useCallback(async () => {
-    await clearSession();
-    const newSession = await createSession();
-    if (newSession.success) {
-      setSessionId(newSession.sessionId);
-    } else {
-      notifyIfUnavailable(newSession.error);
+    await apiSession("DELETE");
+    const created = await apiSession("POST");
+    if (created.success) {
+      setSessionId(created.sessionId ?? null);
     }
     setHasExistingSession(false);
     setExistingSessionData(null);
-  }, [notifyIfUnavailable]);
+  }, []);
 
-  // Debounced save
+  const doSave = useCallback(
+    async (
+      formData: Partial<SignupFormData>,
+      currentStep: number,
+      priceDetails: PriceDetails | null
+    ) => {
+      await apiSession("PATCH", {
+        formData: serializeSignupFormDataForServer(formData as SignupFormData),
+        currentStep,
+        priceDetails,
+      });
+    },
+    []
+  );
+
   const saveProgress = useCallback(
     (
       formData: Partial<SignupFormData>,
@@ -139,16 +147,13 @@ export function useSessionPersistence(
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-
-      debounceTimerRef.current = setTimeout(async () => {
-        const result = await saveSessionProgress(formData, currentStep, priceDetails);
-        notifyIfUnavailable(result.error);
+      debounceTimerRef.current = setTimeout(() => {
+        void doSave(formData, currentStep, priceDetails);
       }, debounceMs);
     },
-    [debounceMs, notifyIfUnavailable]
+    [debounceMs, doSave]
   );
 
-  // Immediate save (for step changes)
   const saveProgressNow = useCallback(
     async (
       formData: Partial<SignupFormData>,
@@ -158,13 +163,11 @@ export function useSessionPersistence(
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      const result = await saveSessionProgress(formData, currentStep, priceDetails);
-      notifyIfUnavailable(result.error);
+      await doSave(formData, currentStep, priceDetails);
     },
-    [notifyIfUnavailable]
+    [doSave]
   );
 
-  // Cleanup debounce timer
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {

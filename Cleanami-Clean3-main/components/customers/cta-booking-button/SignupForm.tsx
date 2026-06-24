@@ -17,10 +17,7 @@ import { Step8Confirmation } from "./Step8Confirmation";
 import { ModalLayout } from "./ModalLayout";
 import { ProgressBar } from "./ProgressBar";
 import { PriceSummary } from "./PriceSummary";
-import { completeSession } from "@/lib/actions/session.actions";
-import { handleCallBooked } from "@/lib/actions/booking.actions";
 import { cn } from "@/lib/utils";
-import { getLivePrice } from "@/lib/actions/clientSidePricing.actions";
 import { toast } from "sonner";
 import { isServiceUnavailableMessage } from "@/lib/env/messages";
 import { serializeSignupFormDataForServer } from "@/lib/validations/bookng-modal/serialize-signup-form";
@@ -147,12 +144,23 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
   // Fetch price when form data changes
   useEffect(() => {
     const fetchPrice = async () => {
-      const details = await getLivePrice(formData);
-      setPriceDetails(details);
+      try {
+        const res = await fetch("/api/pricing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(serializeSignupFormDataForServer(formData)),
+        });
+        if (res.ok) {
+          const details = (await res.json()) as PriceDetails | null;
+          setPriceDetails(details);
+        }
+      } catch {
+        // price fetch errors are non-fatal
+      }
     };
 
     const timerId = setTimeout(() => {
-      fetchPrice();
+      void fetchPrice();
     }, 500);
 
     return () => {
@@ -219,16 +227,22 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
 
   // Call booking handler
   const handleBookCall = async () => {
-    // Save current progress first
     await saveProgressNow(formData, currentStep, priceDetails);
-    
-    // Mark session as having booked a call and trigger email
-    const result = await handleCallBooked();
-    
-    if (result.success) {
+    try {
+      const res = await fetch("/api/onboarding/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_call_booked" }),
+      });
+      const result = (await res.json()) as { success?: boolean; error?: string };
+      if (result.success) {
+        setShowCallBookedConfirmation(true);
+      } else if (result.error && isServiceUnavailableMessage(result.error)) {
+        toast.error(result.error);
+      }
+    } catch {
+      // non-fatal
       setShowCallBookedConfirmation(true);
-    } else if (result.error && isServiceUnavailableMessage(result.error)) {
-      toast.error(result.error);
     }
   };
 
@@ -274,7 +288,16 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
 
       if (response.ok && result.success) {
         setPortalInviteEmailSent(result.data?.portalInviteEmailSent !== false);
-        await completeSession();
+        // Complete the onboarding session (non-fatal if it fails)
+        try {
+          await fetch("/api/onboarding/session", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ complete: true }),
+          });
+        } catch {
+          // ignore
+        }
         setCurrentStep(TOTAL_STEPS);
         return;
       }
@@ -411,8 +434,8 @@ export const SignupForm = ({ isOpen, onClose, initialData }: Props) => {
     if (hasExistingSession && existingSessionData?.success && !initialData) {
       return (
         <ResumeSessionPrompt
-          currentStep={existingSessionData.currentStep}
-          email={existingSessionData.formData.email}
+          currentStep={existingSessionData.currentStep ?? 1}
+          email={existingSessionData.formData?.email}
           onContinue={acceptExistingSession}
           onStartFresh={startFreshSession}
         />

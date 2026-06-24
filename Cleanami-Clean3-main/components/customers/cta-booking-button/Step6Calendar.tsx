@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import React, { useState } from "react";
 import { StepFeedback } from "./StepFeedback";
-import { validateIcalUrl } from "@/lib/actions/validate-ical.actions";
 import { ICalInstructions } from "./ICalInstructions";
 import { FounderCard } from "../../FounderCard";
 
@@ -49,8 +48,17 @@ export const Step6Calendar = ({
     }
     setStatus("validating");
 
-    const result = await validateIcalUrl(formData.iCalUrl);
-    setStatus(result.status);
+    try {
+      const res = await fetch("/api/ical/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: formData.iCalUrl }),
+      });
+      const result = (await res.json()) as { status: "valid" | "invalid_url" | "no_future_events" };
+      setStatus(result.status);
+    } catch {
+      setStatus("invalid_url");
+    }
   };
 
   const StatusMessage = () => {
