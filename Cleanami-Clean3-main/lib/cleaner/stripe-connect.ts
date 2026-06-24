@@ -19,17 +19,7 @@ export async function createStripeOnboardingLink(cleanerId: string) {
   let accountId = cleaner.stripeAccountId;
 
   if (!accountId) {
-    const account = await stripe.accounts.create({
-      type: "express",
-      email: cleaner.email,
-      metadata: { cleanerId: cleaner.id },
-      capabilities: {
-        transfers: { requested: true },
-      },
-    });
-
-    accountId = account.id;
-
+    accountId = await createStripeExpressAccount(cleaner.id, cleaner.email);
     await db
       .update(cleaners)
       .set({ stripeAccountId: accountId, updatedAt: new Date() })
@@ -37,14 +27,54 @@ export async function createStripeOnboardingLink(cleanerId: string) {
   }
 
   const baseUrl = getStripeRedirectBaseUrl();
-  const accountLink = await stripe.accountLinks.create({
-    account: accountId,
-    refresh_url: `${baseUrl}/auth/stripe-connect-return?status=refresh`,
-    return_url: `${baseUrl}/auth/stripe-connect-return?status=complete`,
-    type: "account_onboarding",
+
+  try {
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${baseUrl}/auth/stripe-connect-return?status=refresh`,
+      return_url: `${baseUrl}/auth/stripe-connect-return?status=complete`,
+      type: "account_onboarding",
+    });
+
+    return { url: accountLink.url, accountId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const staleAccount =
+      message.includes("not connected to your platform") ||
+      message.includes("does not exist");
+
+    if (!staleAccount) {
+      throw error;
+    }
+
+    accountId = await createStripeExpressAccount(cleaner.id, cleaner.email);
+    await db
+      .update(cleaners)
+      .set({ stripeAccountId: accountId, updatedAt: new Date() })
+      .where(eq(cleaners.id, cleanerId));
+
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${baseUrl}/auth/stripe-connect-return?status=refresh`,
+      return_url: `${baseUrl}/auth/stripe-connect-return?status=complete`,
+      type: "account_onboarding",
+    });
+
+    return { url: accountLink.url, accountId };
+  }
+}
+
+async function createStripeExpressAccount(cleanerId: string, email: string) {
+  const account = await stripe.accounts.create({
+    type: "express",
+    email,
+    metadata: { cleanerId },
+    capabilities: {
+      transfers: { requested: true },
+    },
   });
 
-  return { url: accountLink.url, accountId };
+  return account.id;
 }
 
 export async function syncStripeOnboardingStatus(cleanerId: string) {

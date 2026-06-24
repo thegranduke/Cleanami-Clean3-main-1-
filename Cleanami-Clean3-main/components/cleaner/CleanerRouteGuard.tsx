@@ -21,10 +21,10 @@ export function CleanerRouteGuard({
       router.replace("/cleaner/onboarding");
       return;
     }
-    if (portalUnlocked && stripePayoutsEnabled && onOnboarding) {
+    if (portalUnlocked && onOnboarding) {
       router.replace("/cleaner/jobs");
     }
-  }, [portalUnlocked, stripePayoutsEnabled, onOnboarding, router]);
+  }, [portalUnlocked, onOnboarding, router]);
 
   if (!portalUnlocked && !onOnboarding) {
     return null;

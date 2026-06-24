@@ -1,5 +1,6 @@
 import { OnboardingWizard } from "@/components/cleaner/OnboardingWizard";
 import { getCleanerAuth } from "@/lib/cleaner-auth";
+import { isCleanerPortalUnlocked } from "@/lib/cleaner/eligibility";
 import { getCleanerOnboardingState } from "@/lib/queries/cleaner-onboarding";
 import { syncStripeOnboardingStatus } from "@/lib/cleaner/stripe-connect";
 import { redirect } from "next/navigation";
@@ -21,11 +22,7 @@ export default async function CleanerOnboardingPage({
 
   const cleaner = await getCleanerOnboardingState(cleanerId);
 
-  if (
-    cleaner.onboardingCompleted &&
-    cleaner.stripePayoutsEnabled &&
-    cleaner.accountStatus === "active"
-  ) {
+  if (isCleanerPortalUnlocked(cleaner)) {
     redirect("/cleaner/jobs");
   }
 

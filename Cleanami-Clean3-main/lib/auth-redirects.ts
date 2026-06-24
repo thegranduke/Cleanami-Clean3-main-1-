@@ -1,6 +1,6 @@
 export function resolvePostAuthPath(role: string | undefined): string {
   if (role === "cleaner") {
-    return "/cleaner/onboarding";
+    return "/cleaner/jobs";
   }
 
   if (role === "admin" || role === "super_admin") {
