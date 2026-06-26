@@ -6,6 +6,7 @@ import * as webcal from "node-ical";
 import { VEvent } from "node-ical";
 import { fromZonedTime } from "date-fns-tz";
 import { differenceInDays, startOfDay } from "date-fns";
+import { calculateJobStaffing } from "@/lib/pricing/staffing-logic";
 
 type NewJob = typeof jobs.$inferInsert;
 type DrizzleDb = NodePgDatabase<typeof schema>;
@@ -63,13 +64,7 @@ type PropertyDetails = {
   hotTubDrainCadence: string | null;
 };
 
-type CalculatedJobDetails = {
-  expectedHours: number;
-  teamSize: number;
-  isDeepClean: boolean;
-  offSiteAddHours: number;
-  expectedLoads: number;
-};
+type CalculatedJobDetails = ReturnType<typeof calculateJobStaffing>;
 
 export class ICalService {
   private db: DrizzleDb;
@@ -252,95 +247,22 @@ export class ICalService {
     jobDate: Date,
     subscriptionStartDate: Date
   ): CalculatedJobDetails {
-    const {
-      bedCount,
-      bathCount,
-      sqFt,
-      laundryType,
-      hotTubServiceLevel,
-      hotTubDrainCadence,
-    } = property;
+    const isDeepClean = property.hotTubServiceLevel
+      ? this._isHotTubDeepCleanDue(
+          jobDate,
+          subscriptionStartDate,
+          property.hotTubDrainCadence
+        )
+      : false;
 
-    // 1. Calculate Base Time (Man Hours)
-    const bathCountNum = Number(bathCount);
-    let totalManHours = -0.585 + 0.95 * bedCount + 0.62 * bathCountNum;
-
-    if (sqFt) {
-      totalManHours += 0.1905 * (sqFt / 250);
-    }
-
-    // 2. Determine Job Size
-    let jobSize: "small" | "medium" | "large";
-    if (bedCount <= 2) jobSize = "small";
-    else if (bedCount <= 4) jobSize = "medium";
-    else jobSize = "large";
-
-    // 3. Calculate expected loads based on job size (for cleaner bonus)
-    // Per Spec Page 48-49: Small=2, Medium=3, Large=4
-    let expectedLoads = 0;
-    if (laundryType === "off_site") {
-      if (jobSize === "small") expectedLoads = 2;
-      else if (jobSize === "medium") expectedLoads = 3;
-      else expectedLoads = 4; // large
-    }
-
-    // 4. Laundry Add-on (Off-Site) - Time calculation
-    let offSiteAddHours = 0;
-    if (laundryType === "off_site") {
-      if (jobSize === "small") offSiteAddHours = 1.25;
-      else if (jobSize === "medium") offSiteAddHours = 1.75;
-      else offSiteAddHours = 2.25; // Large
-
-      totalManHours += offSiteAddHours;
-    }
-
-    // 5. Hot Tub Add-on
-    let isDeepClean = false;
-    if (hotTubServiceLevel) {
-      isDeepClean = this._isHotTubDeepCleanDue(
-        jobDate,
-        subscriptionStartDate,
-        hotTubDrainCadence
-      );
-
-      if (isDeepClean) {
-        totalManHours += 1.0; // Full Drain & Clean
-      } else {
-        totalManHours += 0.333; // Basic
-      }
-    }
-
-    // 6. Determine Team Size
-    let teamSize = 1;
-    if (laundryType === "off_site") {
-      // Off-Site Cleaners column
-      if (jobSize === "small") teamSize = 1;
-      else if (jobSize === "medium") teamSize = 3;
-      else {
-        // Large
-        teamSize = 3;
-        // "auto-escalate to 4 if Off-Site Time > 4.5 hrs"
-        if (totalManHours > 4.5) {
-          teamSize = 4;
-        }
-      }
-    } else {
-      // In-Unit Cleaners column
-      if (jobSize === "small") teamSize = 1;
-      else if (jobSize === "medium") teamSize = 2;
-      else teamSize = 2; // Large
-    }
-
-    // 7. Calculate Expected Hours Per Cleaner
-    const expectedHoursPerCleaner = totalManHours / teamSize;
-
-    return {
-      expectedHours: Math.round(expectedHoursPerCleaner * 100) / 100,
-      teamSize,
-      isDeepClean,
-      offSiteAddHours,
-      expectedLoads,
-    };
+    return calculateJobStaffing({
+      bedCount: property.bedCount,
+      bathCount: property.bathCount,
+      sqFt: property.sqFt,
+      laundryType: property.laundryType,
+      hotTubServiceLevel: property.hotTubServiceLevel,
+      hotTubDeepClean: isDeepClean,
+    });
   }
 
   private async _processAndSaveEventsInBatches(
@@ -419,10 +341,10 @@ export class ICalService {
         checkOutTime: jobDeadline,
         calendarEventUid: compositeUid,
         status: "unassigned" as const,
-        expectedHours: jobDetails.expectedHours.toString(),
+        expectedHours: jobDetails.expectedHoursPerCleaner.toString(),
         addonsSnapshot: {
           laundryType: property.laundryType,
-          laundryLoads: jobDetails.expectedLoads,
+          laundryLoads: jobDetails.expectedLaundryLoads,
           hotTubServiceLevel: property.hotTubServiceLevel
             ? jobDetails.isDeepClean
               ? "deep_clean"
@@ -430,6 +352,12 @@ export class ICalService {
             : "none",
           hotTubDrainCadence: property.hotTubDrainCadence,
           teamSize: jobDetails.teamSize,
+          propertySize: jobDetails.propertySize,
+          requiresManualStaffing: jobDetails.requiresManualStaffing,
+          bedroomBathroomTotal: jobDetails.bedroomBathroomTotal,
+          baseCleaningHours: jobDetails.baseCleaningHours,
+          offSiteLaundryHours: jobDetails.offSiteLaundryHours,
+          hotTubHours: jobDetails.hotTubHours,
         },
       };
     });

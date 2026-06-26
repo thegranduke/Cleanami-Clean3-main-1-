@@ -17,6 +17,7 @@ import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
 import { customerSkipsBilling } from "@/lib/billing/customer-billing";
 import { PricingService } from "@/lib/services/pricing.service";
 import { getStripe } from "@/lib/stripe/get-stripe";
+import { CLEANER_HOURLY_RATE } from "@/lib/pricing/staffing-logic";
 import { and, eq, gt, inArray, ne } from "drizzle-orm";
 
 const pricingService = new PricingService();
@@ -65,7 +66,7 @@ async function createCleanerPayouts(
   if (payTargets.length === 0) return 0;
 
   const hours = parseFloat(expectedHours || "0");
-  const basePay = hours * 17;
+  const basePay = hours * CLEANER_HOURLY_RATE;
 
   await Promise.all(
     payTargets.map((assignment) => {

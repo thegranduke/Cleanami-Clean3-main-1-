@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { jobs, jobsToCleaners, properties, cleaners } from "@/db/schemas";
 import { and, eq, gte, lte, ne, inArray, asc } from "drizzle-orm";
 import { getCleanerJobWindowEnd } from "@/lib/cleaner/planning-window";
+import { CLEANER_HOURLY_RATE } from "@/lib/pricing/staffing-logic";
 
 export type CleanerJobRole =
   | "primary"
@@ -42,7 +43,7 @@ function calculateExpectedPay(
   laundryLoads?: number | null
 ): number {
   const hours = parseFloat(expectedHours || "0");
-  let pay = hours * 17;
+  let pay = hours * CLEANER_HOURLY_RATE;
 
   if (urgentBonus) {
     pay += 10;

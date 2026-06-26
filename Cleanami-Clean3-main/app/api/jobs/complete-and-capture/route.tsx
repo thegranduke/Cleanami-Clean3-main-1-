@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe/get-stripe";
 import { SERVICE_UNAVAILABLE } from "@/lib/env/messages";
+import { CLEANER_HOURLY_RATE } from "@/lib/pricing/staffing-logic";
 
 export async function POST(req: NextRequest) {
   try {
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest) {
       }
 
       const expectedHours = parseFloat(job.expectedHours || "0");
-      const basePayPerCleaner = expectedHours * 17;
+      const basePayPerCleaner = expectedHours * CLEANER_HOURLY_RATE;
 
       const payoutPromises = assignedCleaners.map(async (assignment) => {
         let totalPayout = basePayPerCleaner;
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
     }
 
     const expectedHours = parseFloat(job.expectedHours || "0");
-    const basePayPerCleaner = expectedHours * 17;
+    const basePayPerCleaner = expectedHours * CLEANER_HOURLY_RATE;
 
     const payoutPromises = assignedCleaners.map(async (assignment) => {
       let totalPayout = basePayPerCleaner;

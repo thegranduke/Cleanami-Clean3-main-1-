@@ -14,7 +14,9 @@ export type PayBreakdownData = {
   urgentBonusEligible: boolean;
 };
 
-const BASE_RATE = 17;
+import { CLEANER_HOURLY_RATE } from "@/lib/pricing/staffing-logic";
+
+const BASE_RATE = CLEANER_HOURLY_RATE;
 
 export function buildPayBreakdown(input: {
   expectedHours: string | null;

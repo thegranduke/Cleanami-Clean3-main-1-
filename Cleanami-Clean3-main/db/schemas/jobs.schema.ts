@@ -32,6 +32,12 @@ export const jobs = pgTable('jobs', {
     hotTubServiceLevel?: string | null;
     hotTubDrainCadence?: string | null;
     teamSize?: number | null;
+    propertySize?: "small" | "medium" | "large" | "custom";
+    requiresManualStaffing?: boolean;
+    bedroomBathroomTotal?: number;
+    baseCleaningHours?: number;
+    offSiteLaundryHours?: number;
+    hotTubHours?: number;
   }>(),
   
   paymentIntentId: text('payment_intent_id'),
